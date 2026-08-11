@@ -7,6 +7,7 @@ import path from "node:path";
 import { deflateSync } from "node:zlib";
 import { z } from "zod/v4";
 import type { CheckpointStore } from "./checkpoint-store.js";
+import { registerRemoteFileTools } from "./remote-files.js";
 
 /** Maximum allowed size for element/data input strings (5 MB). */
 const MAX_INPUT_BYTES = 5 * 1024 * 1024;
@@ -453,6 +454,7 @@ Call read_me first to learn the element format.`,
       // Resolve restoreCheckpoint references and save fully resolved state
       const restoreEl = parsed.find((el: any) => el.type === "restoreCheckpoint");
       let resolvedElements: any[];
+      let restoredCheckpoint = null;
 
       if (restoreEl?.id) {
         const base = await store.load(restoreEl.id);
@@ -462,6 +464,7 @@ Call read_me first to learn the element format.`,
             isError: true,
           };
         }
+        restoredCheckpoint = base;
 
         const deleteIds = new Set<string>();
         for (const el of parsed) {
@@ -493,7 +496,10 @@ Call read_me first to learn the element format.`,
         : "";
 
       const checkpointId = crypto.randomUUID().replace(/-/g, "").slice(0, 18);
-      await store.save(checkpointId, { elements: resolvedElements });
+      await store.save(checkpointId, {
+        elements: resolvedElements,
+        remote: restoredCheckpoint?.remote,
+      });
       return {
         content: [{ type: "text", text: `Diagram displayed! Checkpoint id: "${checkpointId}".
 If user asks to create a new diagram - simply create a new one from scratch.
@@ -618,7 +624,12 @@ However, if the user wants to edit something on this diagram "${checkpointId}", 
         };
       }
       try {
-        await store.save(id, JSON.parse(data));
+        const existing = await store.load(id);
+        const update = JSON.parse(data);
+        await store.save(id, {
+          elements: update.elements,
+          remote: existing?.remote,
+        });
         return { content: [{ type: "text", text: "ok" }] };
       } catch (err) {
         return { content: [{ type: "text", text: `save failed: ${(err as Error).message}` }], isError: true };
@@ -680,6 +691,8 @@ However, if the user wants to edit something on this diagram "${checkpointId}", 
       };
     },
   );
+
+  registerRemoteFileTools(server, store);
 }
 
 /**

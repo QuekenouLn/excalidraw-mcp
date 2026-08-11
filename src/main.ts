@@ -8,7 +8,6 @@ import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import cors from "cors";
 import type { Request, Response } from "express";
 import { FileCheckpointStore } from "./checkpoint-store.js";
 import { createServer } from "./server.js";
@@ -24,7 +23,6 @@ export async function startStreamableHTTPServer(
   const port = parseInt(process.env.PORT ?? "3001", 10);
 
   const app = createMcpExpressApp({ host: "0.0.0.0" });
-  app.use(cors());
 
   app.all("/mcp", async (req: Request, res: Response) => {
     const server = createServer();

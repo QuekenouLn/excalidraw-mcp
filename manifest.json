@@ -31,6 +31,18 @@
     {
       "name": "create_view",
       "description": "Renders a hand-drawn diagram using Excalidraw elements with streaming draw-on animations."
+    },
+    {
+      "name": "list_remote_files",
+      "description": "Lists persistent Excalidraw files."
+    },
+    {
+      "name": "open_remote_file",
+      "description": "Loads a persistent Excalidraw file into a checkpoint."
+    },
+    {
+      "name": "save_remote_file",
+      "description": "Saves a checkpoint as a persistent Excalidraw file."
     }
   ],
   "keywords": ["excalidraw", "diagrams", "drawing", "visualization", "mcp-app"],
