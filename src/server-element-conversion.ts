@@ -2,6 +2,7 @@ const PSEUDO_TYPES = new Set(["cameraUpdate", "delete", "restoreCheckpoint"]);
 
 import {
   applyMcpStyleDefaults,
+  applyMcpTextAlignment,
   isCompleteNativeElement,
 } from "./style-defaults.js";
 
@@ -13,15 +14,22 @@ export function convertElementsForStorage(
   bindingTargets: any[] = [],
   indexOffset = 0,
 ): any[] {
-  const real = elements.filter((element) => !PSEUDO_TYPES.has(element.type));
+  const alignedElements = elements.map((element) =>
+    PSEUDO_TYPES.has(element.type) ? element : applyMcpTextAlignment(element),
+  );
+  const real = alignedElements.filter(
+    (element) => !PSEUDO_TYPES.has(element.type),
+  );
   if (
     real.length > 0 &&
     real.every(isCompleteNativeElement)
   ) {
-    return elements;
+    return alignedElements.every((element, index) => element === elements[index])
+      ? elements
+      : alignedElements;
   }
 
-  const styledElements = elements.map((element) =>
+  const styledElements = alignedElements.map((element) =>
     PSEUDO_TYPES.has(element.type) ? element : applyMcpStyleDefaults(element),
   );
   const nativeElements = styledElements.map((element, index) =>
@@ -115,7 +123,7 @@ function createNativeElement(input: any, index: string): any {
     native.text = text;
     native.fontSize = fontSize;
     native.fontFamily = input.fontFamily;
-    native.textAlign = input.textAlign ?? "left";
+    native.textAlign = "center";
     native.verticalAlign = input.verticalAlign ?? "top";
     native.containerId = input.containerId ?? null;
     native.originalText = input.originalText ?? text;
@@ -172,7 +180,7 @@ function createBoundText(
     text,
     fontSize,
     fontFamily: label.fontFamily,
-    textAlign: label.textAlign ?? "center",
+    textAlign: "center",
     verticalAlign: label.verticalAlign ?? "middle",
     containerId: container.id,
     originalText,

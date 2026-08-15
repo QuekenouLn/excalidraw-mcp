@@ -67,7 +67,7 @@ Thanks for calling read_me! Do NOT call it again in this conversation — you wi
 \`type\`, \`id\` (unique string), \`x\`, \`y\`, \`width\`, \`height\`
 
 ### MCP defaults (skip these unless overriding)
-Agent-created elements default to Maple Mono NF CN text, thin strokes, and soft edges. Explicit values always win. Markdown Frames remain sharp.
+Agent-created elements default to Maple Mono NF CN text, thin strokes, and soft edges. Explicit values win except that all newly created text is horizontally centered. Markdown Frames remain sharp.
 strokeColor="#1e1e1e", backgroundColor="transparent", fillStyle="solid", strokeWidth=1, roughness=1, opacity=100
 Canvas background is white.
 
@@ -93,7 +93,7 @@ Canvas background is white.
 \`{ "type": "text", "id": "t1", "x": 150, "y": 138, "text": "Hello", "fontSize": 20 }\`
 - x is the LEFT edge of the text. To center text at position cx: set x = cx - estimatedWidth/2
 - estimatedWidth ≈ text.length × fontSize × 0.5
-- Do NOT rely on textAlign or width for positioning — they only affect multi-line wrapping
+- MCP fixes textAlign to "center". Continue positioning with x and estimatedWidth because alignment only affects text inside its bounds.
 
 **Arrow**: \`{ "type": "arrow", "id": "a1", "x": 300, "y": 150, "width": 200, "height": 0, "points": [[0,0],[200,0]], "endArrowhead": "arrow" }\`
 - points: [dx, dy] offsets from element x,y

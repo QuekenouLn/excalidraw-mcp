@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { applyMcpStyleDefaults } from "../src/style-defaults";
+import {
+  applyMcpStyleDefaults,
+  applyMcpTextAlignment,
+} from "../src/style-defaults";
 
 describe("MCP style defaults", () => {
   test("applies Maple, thin, and type-aware soft edges", () => {
@@ -54,5 +57,35 @@ describe("MCP style defaults", () => {
       versionNonce: 5,
     };
     expect(applyMcpStyleDefaults(native)).toBe(native);
+  });
+
+  test("forces new text and labels to horizontal center", () => {
+    const text = {
+      type: "text",
+      textAlign: "right",
+      verticalAlign: "bottom",
+    };
+    const shape = {
+      type: "rectangle",
+      label: {
+        text: "Label",
+        textAlign: "left",
+        verticalAlign: "top",
+      },
+    };
+
+    expect(applyMcpTextAlignment(text)).toEqual({
+      ...text,
+      textAlign: "center",
+    });
+    expect(applyMcpTextAlignment(shape)).toEqual({
+      ...shape,
+      label: {
+        ...shape.label,
+        textAlign: "center",
+      },
+    });
+    expect(text.textAlign).toBe("right");
+    expect(shape.label.textAlign).toBe("left");
   });
 });

@@ -4,13 +4,17 @@ import {
 } from "@excalidraw/excalidraw";
 import {
   applyMcpStyleDefaults,
+  applyMcpTextAlignment,
   isCompleteNativeElement,
   MCP_DEFAULT_FONT_FAMILY,
 } from "./style-defaults";
 
 (FONT_FAMILY as any)["Maple Mono NF CN"] = MCP_DEFAULT_FONT_FAMILY;
 
-export function convertRawElements(elements: any[]): any[] {
+export function convertRawElements(
+  elements: any[],
+  { centerNewText = true }: { centerNewText?: boolean } = {},
+): any[] {
   const pseudoTypes = new Set([
     "cameraUpdate",
     "delete",
@@ -20,7 +24,10 @@ export function convertRawElements(elements: any[]): any[] {
   const real = elements.filter((element) => !pseudoTypes.has(element.type));
   const isNativeScene = real.every(isCompleteNativeElement);
   if (isNativeScene) {
-    return [...real, ...pseudos];
+    return [
+      ...(centerNewText ? real.map(applyMcpTextAlignment) : real),
+      ...pseudos,
+    ];
   }
 
   const withDefaults = real.map((input) => {
@@ -43,7 +50,10 @@ export function convertRawElements(elements: any[]): any[] {
   const converted = convertToExcalidrawElements(withDefaults, {
     regenerateIds: false,
   });
-  return [...converted, ...pseudos];
+  return [
+    ...(centerNewText ? converted.map(applyMcpTextAlignment) : converted),
+    ...pseudos,
+  ];
 }
 
 function normalizeArrowBindings(element: any): any {

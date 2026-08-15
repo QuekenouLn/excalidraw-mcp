@@ -41,6 +41,27 @@ export const isCompleteNativeElement = (element: any): boolean => {
   );
 };
 
+export const applyMcpTextAlignment = (element: any): any => {
+  if (element.type === "text") {
+    return {
+      ...element,
+      textAlign: "center",
+    };
+  }
+
+  if (element.label) {
+    return {
+      ...element,
+      label: {
+        ...element.label,
+        textAlign: "center",
+      },
+    };
+  }
+
+  return element;
+};
+
 export const applyMcpStyleDefaults = (element: any): any => {
   if (isCompleteNativeElement(element)) {
     return element;

@@ -31,8 +31,8 @@ describe("create_view style protocol", () => {
       name: "create_view",
       arguments: {
         elements: JSON.stringify([
-          { type: "rectangle", id: "card", x: 0, y: 0, width: 160, height: 80, label: { text: "Card" } },
-          { type: "text", id: "title", x: 0, y: 100, text: "Title", fontSize: 24 },
+          { type: "rectangle", id: "card", x: 0, y: 0, width: 160, height: 80, label: { text: "Card", textAlign: "right" } },
+          { type: "text", id: "title", x: 0, y: 100, text: "Title", fontSize: 24, textAlign: "left", verticalAlign: "bottom" },
         ]),
       },
     });
@@ -49,20 +49,30 @@ describe("create_view style protocol", () => {
       strokeWidth: 1,
       roundness: { type: 3, value: 12 },
     });
-    expect(title.fontFamily).toBe(11);
-    expect(label.fontFamily).toBe(11);
+    expect(title).toMatchObject({
+      fontFamily: 11,
+      textAlign: "center",
+      verticalAlign: "bottom",
+    });
+    expect(label).toMatchObject({
+      fontFamily: 11,
+      textAlign: "center",
+    });
   });
 
   test("keeps checkpoint elements unchanged while styling additions", async () => {
     const existing = {
-      id: "existing",
-      type: "rectangle",
+      id: "existing-text",
+      type: "text",
       x: 0,
       y: 0,
       width: 120,
-      height: 60,
-      strokeWidth: 4,
-      roundness: null,
+      height: 24,
+      text: "Existing",
+      fontSize: 20,
+      fontFamily: 5,
+      lineHeight: 1.2,
+      textAlign: "right",
       version: 7,
       versionNonce: 8,
       customData: { owner: "user" },
@@ -74,7 +84,7 @@ describe("create_view style protocol", () => {
       arguments: {
         elements: JSON.stringify([
           { type: "restoreCheckpoint", id: "style_source" },
-          { type: "rectangle", id: "new", x: 200, y: 0, width: 120, height: 60 },
+          { type: "text", id: "new", x: 200, y: 0, text: "New", fontSize: 20, textAlign: "left" },
         ]),
       },
     });
@@ -86,8 +96,7 @@ describe("create_view style protocol", () => {
     expect(checkpoint?.elements[1]).toMatchObject({
       id: "new",
       index: "a1",
-      strokeWidth: 1,
-      roundness: { type: 3, value: 12 },
+      textAlign: "center",
     });
     expect(await store.load("style_source")).toEqual({ elements: [existing] });
   });

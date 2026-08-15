@@ -439,7 +439,7 @@ function DiagramView({ toolInput, isFinal, displayMode, onElements, editedElemen
               if (cam) viewport = { x: cam.x, y: cam.y, width: cam.width, height: cam.height };
             }
             // Convert base with convertRawElements (handles both raw and already-converted)
-            base = convertRawElements(base);
+            base = convertRawElements(base, { centerNewText: false });
           }
           if (base && deleteIds.size > 0) {
             base = base.filter((el: any) => !deleteIds.has(el.id) && !deleteIds.has(el.containerId));
@@ -485,7 +485,9 @@ function DiagramView({ toolInput, isFinal, displayMode, onElements, editedElemen
           if (loadCheckpoint) {
             const saved = await loadCheckpoint(streamRestoreId);
             if (saved) {
-              const converted = convertRawElements(saved.elements);
+              const converted = convertRawElements(saved.elements, {
+                centerNewText: false,
+              });
               restoredRef.current = { id: streamRestoreId, elements: converted };
             }
           }
