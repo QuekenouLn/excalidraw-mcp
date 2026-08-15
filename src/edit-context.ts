@@ -88,6 +88,18 @@ export function getLatestEditedElements(): any[] | null {
   return latestEditedElements;
 }
 
+export async function saveNativeCheckpoint(
+  app: App,
+  id: string,
+  elements: readonly any[],
+): Promise<void> {
+  const live = [...elements].filter((element: any) => !element.isDeleted);
+  await app.callServerTool({
+    name: "save_checkpoint",
+    arguments: { id, data: JSON.stringify({ elements: live }) },
+  });
+}
+
 /**
  * Excalidraw onChange handler. Persists to localStorage and sends updated
  * elements JSON to model context — only when user actually changed something
@@ -108,10 +120,7 @@ export function onEditorChange(app: App, elements: readonly any[]) {
       } catch {}
     }
     if (checkpointId) {
-      app.callServerTool({
-        name: "save_checkpoint",
-        arguments: { id: checkpointId, data: JSON.stringify({ elements: live }) },
-      }).catch(() => {});
+      saveNativeCheckpoint(app, checkpointId, live).catch(() => {});
     }
     const diff = computeDiff(live);
     if (diff) {

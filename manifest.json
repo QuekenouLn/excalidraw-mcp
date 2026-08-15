@@ -43,6 +43,10 @@
     {
       "name": "save_remote_file",
       "description": "Saves a checkpoint as a persistent Excalidraw file."
+    },
+    {
+      "name": "delete_remote_file",
+      "description": "Permanently deletes a remote Excalidraw file after explicit user confirmation."
     }
   ],
   "keywords": ["excalidraw", "diagrams", "drawing", "visualization", "mcp-app"],

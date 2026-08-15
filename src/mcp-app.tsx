@@ -1,10 +1,11 @@
 import { useApp } from "@modelcontextprotocol/ext-apps/react";
 import type { App } from "@modelcontextprotocol/ext-apps";
-import {  Excalidraw, exportToSvg, convertToExcalidrawElements, restore, CaptureUpdateAction, FONT_FAMILY, serializeAsJSON, MainMenu } from "@excalidraw/excalidraw";
+import {  Excalidraw, exportToSvg, restore, CaptureUpdateAction, serializeAsJSON, MainMenu } from "@excalidraw/excalidraw";
 import morphdom from "morphdom";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { convertRawElements } from "./element-conversion";
 import { initPencilAudio, playStroke } from "./pencil-audio";
-import { captureInitialElements, onEditorChange, setStorageKey, loadPersistedElements, getLatestEditedElements, setCheckpointId } from "./edit-context";
+import { captureInitialElements, onEditorChange, setStorageKey, loadPersistedElements, getLatestEditedElements, saveNativeCheckpoint, setCheckpointId } from "./edit-context";
 import "./global.css";
 
 // ============================================================
@@ -40,20 +41,6 @@ interface ViewportRect {
   y: number;
   width: number;
   height: number;
-}
-
-/** Convert raw shorthand elements → Excalidraw format (labels → bound text, font fix).
- *  Preserves pseudo-elements like cameraUpdate (not valid Excalidraw types). */
-function convertRawElements(els: any[]): any[] {
-  const pseudoTypes = new Set(["cameraUpdate", "delete", "restoreCheckpoint"]);
-  const pseudos = els.filter((el: any) => pseudoTypes.has(el.type));
-  const real = els.filter((el: any) => !pseudoTypes.has(el.type));
-  const withDefaults = real.map((el: any) =>
-    el.label ? { ...el, label: { textAlign: "center", verticalAlign: "middle", ...el.label } } : el
-  );
-  const converted = convertToExcalidrawElements(withDefaults, { regenerateIds: false })
-    .map((el: any) => el.type === "text" ? { ...el, fontFamily: (FONT_FAMILY as any).Excalifont ?? 1 } : el);
-  return [...converted, ...pseudos];
 }
 
 /** Fix SVG viewBox to 4:3 by expanding the smaller dimension and centering. */
@@ -267,11 +254,14 @@ function DiagramView({ toolInput, isFinal, displayMode, onElements, editedElemen
     return () => observer.disconnect();
   }, [displayMode]);
 
-  // Font preloading — ensure Virgil is loaded before first export
+  // Font preloading — keep text metrics stable before first export
   const fontsReady = useRef<Promise<void> | null>(null);
   const ensureFontsLoaded = useCallback(() => {
     if (!fontsReady.current) {
-      fontsReady.current = document.fonts.load('20px Excalifont').then(() => {});
+      fontsReady.current = Promise.all([
+        document.fonts.load('20px "Maple Mono NF CN"'),
+        document.fonts.load('20px Excalifont'),
+      ]).then(() => {});
     }
     return fontsReady.current;
   }, []);
@@ -669,6 +659,13 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
   const elementsRef = useRef<any[]>([]);
   const checkpointIdRef = useRef<string | null>(null);
 
+  const syncNativeCheckpoint = useCallback((nextElements: any[]) => {
+    elementsRef.current = nextElements;
+    const checkpointId = checkpointIdRef.current;
+    if (!checkpointId || !appRef.current || nextElements.length === 0) return;
+    saveNativeCheckpoint(appRef.current, checkpointId, nextElements).catch(() => {});
+  }, []);
+
   const toggleFullscreen = useCallback(async () => {
     if (!appRef.current) return;
     const newMode = displayMode === "fullscreen" ? "inline" : "fullscreen";
@@ -823,16 +820,18 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
         // Check for persisted edits from a previous fullscreen session
         const persisted = loadPersistedElements();
         if (persisted && persisted.length > 0) {
-          elementsRef.current = persisted;
+          syncNativeCheckpoint(persisted);
           setElements(persisted);
           setUserEdits(persisted);
+        } else if (elementsRef.current.length > 0) {
+          syncNativeCheckpoint(elementsRef.current);
         }
       }
     };
 
     app.onteardown = async () => ({});
     app.onerror = (err) => console.error("[Excalidraw] Error:", err);
-  }, [app]);
+  }, [app, syncNativeCheckpoint]);
 
   // Track narrow viewport for mobile layout adjustments
   useEffect(() => {
@@ -979,7 +978,7 @@ export function ExcalidrawAppCore({ app }: { app: App }) {
           onClick={undefined}
           style={undefined}
         >
-          <DiagramView toolInput={toolInput} isFinal={inputIsFinal} displayMode={displayMode} onElements={(els) => { elementsRef.current = els; setElements(els); }} editedElements={userEdits ?? undefined} onViewport={(vp) => { svgViewportRef.current = vp; }} loadCheckpoint={async (id) => {
+          <DiagramView toolInput={toolInput} isFinal={inputIsFinal} displayMode={displayMode} onElements={(els) => { syncNativeCheckpoint(els); setElements(els); }} editedElements={userEdits ?? undefined} onViewport={(vp) => { svgViewportRef.current = vp; }} loadCheckpoint={async (id) => {
             if (!appRef.current) return null;
             try {
               const result = await appRef.current.callServerTool({ name: "read_checkpoint", arguments: { id } });

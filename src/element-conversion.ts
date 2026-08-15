@@ -1,0 +1,61 @@
+import {
+  convertToExcalidrawElements,
+  FONT_FAMILY,
+} from "@excalidraw/excalidraw";
+import {
+  applyMcpStyleDefaults,
+  isCompleteNativeElement,
+  MCP_DEFAULT_FONT_FAMILY,
+} from "./style-defaults";
+
+(FONT_FAMILY as any)["Maple Mono NF CN"] = MCP_DEFAULT_FONT_FAMILY;
+
+export function convertRawElements(elements: any[]): any[] {
+  const pseudoTypes = new Set([
+    "cameraUpdate",
+    "delete",
+    "restoreCheckpoint",
+  ]);
+  const pseudos = elements.filter((element) => pseudoTypes.has(element.type));
+  const real = elements.filter((element) => !pseudoTypes.has(element.type));
+  const isNativeScene = real.every(isCompleteNativeElement);
+  if (isNativeScene) {
+    return [...real, ...pseudos];
+  }
+
+  const withDefaults = real.map((input) => {
+    const element = applyMcpStyleDefaults(input);
+    const normalized =
+      element.type === "arrow"
+        ? normalizeArrowBindings(element)
+        : element;
+    return normalized.label
+      ? {
+          ...normalized,
+          label: {
+            textAlign: "center",
+            verticalAlign: "middle",
+            ...normalized.label,
+          },
+        }
+      : normalized;
+  });
+  const converted = convertToExcalidrawElements(withDefaults, {
+    regenerateIds: false,
+  });
+  return [...converted, ...pseudos];
+}
+
+function normalizeArrowBindings(element: any): any {
+  const { startBinding, endBinding, boundElements, ...arrow } = element;
+  return {
+    ...arrow,
+    roundness: arrow.roundness,
+    start:
+      arrow.start ??
+      (startBinding?.elementId ? { id: startBinding.elementId } : undefined),
+    end:
+      arrow.end ??
+      (endBinding?.elementId ? { id: endBinding.elementId } : undefined),
+  };
+}

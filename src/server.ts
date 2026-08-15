@@ -5,9 +5,11 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
+import { convertElementsForStorage } from "./server-element-conversion.js";
 import { z } from "zod/v4";
 import type { CheckpointStore } from "./checkpoint-store.js";
 import { registerRemoteFileTools } from "./remote-files.js";
+import { registerMarkdownFrameTools } from "./markdown-frame-tools.js";
 
 /** Maximum allowed size for element/data input strings (5 MB). */
 const MAX_INPUT_BYTES = 5 * 1024 * 1024;
@@ -64,14 +66,15 @@ Thanks for calling read_me! Do NOT call it again in this conversation — you wi
 ### Required Fields (all elements)
 \`type\`, \`id\` (unique string), \`x\`, \`y\`, \`width\`, \`height\`
 
-### Defaults (skip these)
-strokeColor="#1e1e1e", backgroundColor="transparent", fillStyle="solid", strokeWidth=2, roughness=1, opacity=100
+### MCP defaults (skip these unless overriding)
+Agent-created elements default to Maple Mono NF CN text, thin strokes, and soft edges. Explicit values always win. Markdown Frames remain sharp.
+strokeColor="#1e1e1e", backgroundColor="transparent", fillStyle="solid", strokeWidth=1, roughness=1, opacity=100
 Canvas background is white.
 
 ### Element Types
 
 **Rectangle**: \`{ "type": "rectangle", "id": "r1", "x": 100, "y": 100, "width": 200, "height": 100 }\`
-- \`roundness: { type: 3 }\` for rounded corners
+- Soft corners are automatic. Use \`roundness: null\` only when sharp corners are required.
 - \`backgroundColor: "#a5d8ff"\`, \`fillStyle: "solid"\` for filled
 
 **Ellipse**: \`{ "type": "ellipse", "id": "e1", "x": 100, "y": 100, "width": 150, "height": 150 }\`
@@ -95,10 +98,15 @@ Canvas background is white.
 **Arrow**: \`{ "type": "arrow", "id": "a1", "x": 300, "y": 150, "width": 200, "height": 0, "points": [[0,0],[200,0]], "endArrowhead": "arrow" }\`
 - points: [dx, dy] offsets from element x,y
 - endArrowhead: null | "arrow" | "bar" | "dot" | "triangle"
+- Edges default to soft (the middle edge option). Set \`"roundness": null\` for sharp edges.
 
 ### Arrow Bindings
-Arrow: \`"startBinding": { "elementId": "r1", "fixedPoint": [1, 0.5] }\`
+Use both endpoint bindings so arrows remain attached when cards move:
+\`{ "type": "arrow", "id": "a1", "x": 300, "y": 150, "width": 200, "height": 0, "points": [[0,0],[200,0]], "startBinding": { "elementId": "r1", "fixedPoint": [1,0.5] }, "endBinding": { "elementId": "r2", "fixedPoint": [0,0.5] }, "endArrowhead": "arrow" }\`
 fixedPoint: top=[0.5,0], bottom=[0.5,1], left=[0,0.5], right=[1,0.5]
+- The converter creates native two-way references on both cards; do not add \`boundElements\` manually
+- A card can have both a \`label\` and any number of bound arrows; these references are merged
+- Moving or resizing a labeled card keeps its centered text and bound arrows attached
 
 **cameraUpdate** (pseudo-element — controls the viewport, not drawn):
 \`{ "type": "cameraUpdate", "width": 800, "height": 600, "x": 0, "y": 0 }\`
@@ -400,7 +408,10 @@ Use the Primary Colors from above — they're bright enough on dark backgrounds.
  * Shared between local (main.ts) and Vercel (api/mcp.ts) entry points.
  */
 export function registerTools(server: McpServer, distDir: string, store: CheckpointStore): void {
-  const resourceUri = "ui://excalidraw/mcp-app.html";
+  const resourceUri = "ui://excalidraw/mcp-app-v2.html";
+  const mapleFontUrl = process.env.MCP_MAPLE_FONT_URL ||
+    "http://127.0.0.1:5000/fonts/MapleMono/MapleMono-NF-CN-Regular.woff2";
+  const mapleFontOrigin = new URL(mapleFontUrl).origin;
 
   // ============================================================
   // Tool 1: read_me (call before drawing)
@@ -479,9 +490,38 @@ Call read_me first to learn the element format.`,
         const newEls = parsed.filter((el: any) =>
           el.type !== "restoreCheckpoint" && el.type !== "delete"
         );
-        resolvedElements = [...baseFiltered, ...newEls];
+        const bindingTargetIds = new Set(
+          newEls.flatMap((element: any) =>
+            element.type === "arrow"
+              ? [
+                  element.startBinding?.elementId ?? element.start?.id,
+                  element.endBinding?.elementId ?? element.end?.id,
+                ].filter(Boolean)
+              : [],
+          ),
+        );
+        const baseForMerge = baseFiltered.map((element: any) =>
+          bindingTargetIds.has(element.id)
+            ? {
+                ...element,
+                boundElements: element.boundElements
+                  ? [...element.boundElements]
+                  : null,
+              }
+            : element,
+        );
+        resolvedElements = [
+          ...baseForMerge,
+          ...convertElementsForStorage(
+            newEls,
+            baseForMerge,
+            baseForMerge.length,
+          ),
+        ];
       } else {
-        resolvedElements = parsed.filter((el: any) => el.type !== "delete");
+        resolvedElements = convertElementsForStorage(
+          parsed.filter((el: any) => el.type !== "delete"),
+        );
       }
 
       // Check camera aspect ratios — nudge toward 4:3
@@ -658,12 +698,12 @@ However, if the user wants to edit something on this diagram "${checkpointId}", 
     },
   );
 
-  // CSP: allow Excalidraw to load fonts from esm.sh
+  // CSP: allow Excalidraw and the configured Maple font host
   const cspMeta = {
     ui: {
       csp: {
-        resourceDomains: ["https://esm.sh"],
-        connectDomains: ["https://esm.sh"],
+        resourceDomains: ["https://esm.sh", mapleFontOrigin],
+        connectDomains: ["https://esm.sh", mapleFontOrigin],
       },
     },
   };
@@ -674,7 +714,9 @@ However, if the user wants to edit something on this diagram "${checkpointId}", 
     resourceUri,
     { mimeType: RESOURCE_MIME_TYPE },
     async (): Promise<ReadResourceResult> => {
-      const html = await fs.readFile(path.join(distDir, "mcp-app.html"), "utf-8");
+      const html = (
+        await fs.readFile(path.join(distDir, "mcp-app.html"), "utf-8")
+      ).replaceAll("__MCP_MAPLE_FONT_URL__", mapleFontUrl);
       return {
         contents: [{
           uri: resourceUri,
@@ -693,6 +735,7 @@ However, if the user wants to edit something on this diagram "${checkpointId}", 
   );
 
   registerRemoteFileTools(server, store);
+  registerMarkdownFrameTools(server, store);
 }
 
 /**

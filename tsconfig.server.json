@@ -13,5 +13,11 @@
     "esModuleInterop": true,
     "resolveJsonModule": true
   },
-  "include": ["src/server.ts", "src/checkpoint-store.ts", "src/remote-files.ts"]
+  "include": [
+    "src/server.ts",
+    "src/checkpoint-store.ts",
+    "src/remote-files.ts",
+    "src/markdown-frame.ts",
+    "src/markdown-frame-tools.ts"
+  ]
 }

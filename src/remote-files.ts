@@ -164,8 +164,13 @@ export function registerRemoteFileTools(server: McpServer, store: CheckpointStor
         const document: ExcalidrawDocument = {
           type: base?.type || "excalidraw",
           version: base?.version || 2,
-          source: base?.source || "excalidraw-mcp",
-          elements: checkpoint.elements,
+          source: "excalidraw-mcp-native",
+          elements: checkpoint.elements.filter(
+            (element) =>
+              !["cameraUpdate", "delete", "restoreCheckpoint"].includes(
+                element.type,
+              ),
+          ),
           appState: base?.appState || {},
           files: base?.files || {},
         };
@@ -195,6 +200,40 @@ export function registerRemoteFileTools(server: McpServer, store: CheckpointStor
         return {
           content: [{ type: "text", text: `Saved ${name} at revision ${saved.revision}.` }],
           structuredContent: { name, revision: saved.revision, checkpointId },
+        };
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "delete_remote_file",
+    {
+      description: "Permanently delete a remote .excalidraw file. Call this only after the user explicitly agrees to delete the named file. Requires the latest revision from list_remote_files.",
+      inputSchema: {
+        name: filenameSchema,
+        expectedRevision: z.string().regex(/^[a-f0-9]{64}$/),
+        confirmed: z.literal(true).describe(
+          "Must be true only after the user explicitly confirms deletion of this named file.",
+        ),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+      },
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ name, expectedRevision }): Promise<CallToolResult> => {
+      try {
+        await request(fileUrl(name), {
+          method: "DELETE",
+          headers: { "If-Match": expectedRevision },
+        });
+        return {
+          content: [{ type: "text", text: `Deleted ${name}.` }],
+          structuredContent: { name, deleted: true },
         };
       } catch (error) {
         return errorResult(error);
