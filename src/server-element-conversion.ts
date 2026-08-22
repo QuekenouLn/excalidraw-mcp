@@ -24,9 +24,13 @@ export function convertElementsForStorage(
     real.length > 0 &&
     real.every(isCompleteNativeElement)
   ) {
-    return alignedElements.every((element, index) => element === elements[index])
+    const centeredElements = centerBoundTextElements(
+      alignedElements,
+      bindingTargets,
+    );
+    return centeredElements.every((element, index) => element === elements[index])
       ? elements
-      : alignedElements;
+      : centeredElements;
   }
 
   const styledElements = alignedElements.map((element) =>
@@ -70,7 +74,10 @@ export function convertElementsForStorage(
     element.index = `a${indexOffset + index}`;
   }
 
-  return [...nativeElements, ...labels];
+  return centerBoundTextElements(
+    [...nativeElements, ...labels],
+    bindingTargets,
+  );
 }
 
 function createNativeElement(input: any, index: string): any {
@@ -124,7 +131,9 @@ function createNativeElement(input: any, index: string): any {
     native.fontSize = fontSize;
     native.fontFamily = input.fontFamily;
     native.textAlign = "center";
-    native.verticalAlign = input.verticalAlign ?? "top";
+    native.verticalAlign = input.containerId
+      ? "middle"
+      : input.verticalAlign ?? "top";
     native.containerId = input.containerId ?? null;
     native.originalText = input.originalText ?? text;
     native.autoResize = input.autoResize ?? true;
@@ -181,12 +190,76 @@ function createBoundText(
     fontSize,
     fontFamily: label.fontFamily,
     textAlign: "center",
-    verticalAlign: label.verticalAlign ?? "middle",
+    verticalAlign: "middle",
     containerId: container.id,
     originalText,
     autoResize: true,
     lineHeight: 1.2,
   };
+}
+
+function centerBoundTextElements(elements: any[], bindingTargets: any[]): any[] {
+  const sceneIds = new Set(elements.map((element) => element.id));
+  const byId = new Map(
+    [...bindingTargets, ...elements]
+      .filter((element) => element.id)
+      .map((element) => [element.id, element]),
+  );
+  const replacements = new Map<string, any>();
+
+  for (const element of elements) {
+    if (element.type !== "text" || !element.containerId) continue;
+    const container =
+      replacements.get(element.containerId) ?? byId.get(element.containerId);
+    if (
+      !container ||
+      !isFiniteNumber(container.x) ||
+      !isFiniteNumber(container.y) ||
+      !isFiniteNumber(container.width) ||
+      !isFiniteNumber(container.height) ||
+      !isFiniteNumber(element.width) ||
+      !isFiniteNumber(element.height)
+    ) {
+      continue;
+    }
+
+    const x = container.x + (container.width - element.width) / 2;
+    const y = container.y + (container.height - element.height) / 2;
+    if (
+      element.x !== x ||
+      element.y !== y ||
+      element.textAlign !== "center" ||
+      element.verticalAlign !== "middle"
+    ) {
+      const centeredText = {
+        ...element,
+        x,
+        y,
+        textAlign: "center",
+        verticalAlign: "middle",
+      };
+      replacements.set(element.id, centeredText);
+      byId.set(element.id, centeredText);
+    }
+
+    const boundElement = { id: element.id, type: "text" };
+    if (!container.boundElements?.some((item: any) => item.id === element.id)) {
+      if (sceneIds.has(container.id)) {
+        const boundContainer = {
+          ...container,
+          boundElements: [...(container.boundElements ?? []), boundElement],
+        };
+        replacements.set(container.id, boundContainer);
+        byId.set(container.id, boundContainer);
+      } else {
+        addBoundElement(container, boundElement);
+      }
+    }
+  }
+
+  return replacements.size > 0
+    ? elements.map((element) => replacements.get(element.id) ?? element)
+    : elements;
 }
 
 function getBoundTextMaxWidth(container: any): number {
