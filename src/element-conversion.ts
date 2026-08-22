@@ -1,6 +1,7 @@
 import {
   convertToExcalidrawElements,
   FONT_FAMILY,
+  restoreElements,
 } from "@excalidraw/excalidraw";
 import {
   applyMcpStyleDefaults,
@@ -10,6 +11,35 @@ import {
 } from "./style-defaults";
 
 (FONT_FAMILY as any)["Maple Mono NF CN"] = MCP_DEFAULT_FONT_FAMILY;
+
+export function refreshRestoredElements(elements: any[]): any[] {
+  const restored = restoreElements(
+    elements,
+    null,
+    { refreshDimensions: true, repairBindings: true },
+  );
+  const elementsMap = new Map(
+    restored.map((element) => [element.id, element]),
+  ) as any;
+
+  return restored.map((element) => {
+    if (element.type !== "text" || !element.containerId) {
+      return element;
+    }
+    const container = elementsMap.get(element.containerId);
+    if (!container) {
+      return element;
+    }
+    if (container.type === "arrow") {
+      return element;
+    }
+    return {
+      ...element,
+      x: container.x + (container.width - element.width) / 2,
+      y: container.y + (container.height - element.height) / 2,
+    };
+  });
+}
 
 export function convertRawElements(
   elements: any[],
