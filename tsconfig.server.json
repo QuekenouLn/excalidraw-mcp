@@ -16,6 +16,9 @@
   "include": [
     "src/server.ts",
     "src/checkpoint-store.ts",
+    "src/scene-query.ts",
+    "src/atomic-scene-edit.ts",
+    "src/atomic-tools.ts",
     "src/remote-files.ts",
     "src/markdown-frame.ts",
     "src/markdown-frame-tools.ts"

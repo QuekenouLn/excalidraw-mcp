@@ -8,6 +8,7 @@ import { deflateSync } from "node:zlib";
 import { convertElementsForStorage } from "./server-element-conversion.js";
 import { z } from "zod/v4";
 import type { CheckpointStore } from "./checkpoint-store.js";
+import { registerAtomicTools } from "./atomic-tools.js";
 import { registerRemoteFileTools } from "./remote-files.js";
 import { registerMarkdownFrameTools } from "./markdown-frame-tools.js";
 
@@ -736,6 +737,7 @@ However, if the user wants to edit something on this diagram "${checkpointId}", 
 
   registerRemoteFileTools(server, store);
   registerMarkdownFrameTools(server, store);
+  registerAtomicTools(server, store);
 }
 
 /**
