@@ -9,6 +9,8 @@ import {
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
+const TEXT_HORIZONTAL_SAFETY_PADDING = 8;
+
 export function convertElementsForStorage(
   elements: any[],
   bindingTargets: any[] = [],
@@ -123,7 +125,13 @@ function createNativeElement(input: any, index: string): any {
     const lines = text.split("\n");
     native.width = isFiniteNumber(input.width)
       ? input.width
-      : Math.max(...lines.map((line) => measureLineWidth(line, fontSize)), fontSize);
+      : Math.max(
+          ...lines.map(
+            (line) =>
+              measureLineWidth(line, fontSize) + TEXT_HORIZONTAL_SAFETY_PADDING,
+          ),
+          fontSize,
+        );
     native.height = isFiniteNumber(input.height)
       ? input.height
       : Math.max(lines.length, 1) * fontSize * (input.lineHeight ?? 1.2);
@@ -152,10 +160,17 @@ function createBoundText(
   const fontSize = label.fontSize ?? 20;
   const originalText = String(label.text);
   const maxWidth = getBoundTextMaxWidth(container);
-  const text = wrapText(originalText, fontSize, maxWidth);
+  const text = wrapText(
+    originalText,
+    fontSize,
+    Math.max(maxWidth - TEXT_HORIZONTAL_SAFETY_PADDING, fontSize),
+  );
   const lines = text.split("\n");
   const width = Math.max(
-    ...lines.map((line) => measureLineWidth(line, fontSize)),
+    ...lines.map(
+      (line) =>
+        measureLineWidth(line, fontSize) + TEXT_HORIZONTAL_SAFETY_PADDING,
+    ),
     fontSize,
   );
   const height = lines.length * fontSize * 1.2;
