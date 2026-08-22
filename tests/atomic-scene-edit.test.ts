@@ -7,6 +7,7 @@ import {
   type AtomicSceneEditResult,
   type AtomicSceneElement,
 } from "../src/atomic-scene-edit";
+import { convertElementsForStorage } from "../src/server-element-conversion";
 import {
   ATOMIC_SCENE_IDS,
   assertAtomicSceneBidirectionalBindings,
@@ -85,7 +86,87 @@ const captureAtomicError = (callback: () => unknown): AtomicSceneEditError => {
   return caught as AtomicSceneEditError;
 };
 
+const expectPointOnElementBoundary = (
+  point: readonly [number, number],
+  element: AtomicSceneElement,
+) => {
+  const tolerance = 1.01;
+  const left = element.x;
+  const right = element.x + element.width;
+  const top = element.y;
+  const bottom = element.y + element.height;
+  const onVerticalEdge =
+    (Math.abs(point[0] - left) <= tolerance ||
+      Math.abs(point[0] - right) <= tolerance) &&
+    point[1] >= top - tolerance &&
+    point[1] <= bottom + tolerance;
+  const onHorizontalEdge =
+    (Math.abs(point[1] - top) <= tolerance ||
+      Math.abs(point[1] - bottom) <= tolerance) &&
+    point[0] >= left - tolerance &&
+    point[0] <= right + tolerance;
+
+  expect(onVerticalEdge || onHorizontalEdge).toBe(true);
+};
+
 describe("atomic scene editing", () => {
+  test("creates centered safe labels and boundary-bound arrows after nodes move", () => {
+    const restored = convertElementsForStorage([
+      {
+        id: "moved-source",
+        type: "rectangle",
+        x: 120,
+        y: 260,
+        width: 240,
+        height: 100,
+        label: { text: "平台防御", fontSize: 20, fontFamily: 11 },
+      },
+      {
+        id: "moved-target",
+        type: "rectangle",
+        x: 560,
+        y: 260,
+        width: 240,
+        height: 100,
+      },
+      {
+        id: "moved-connector",
+        type: "arrow",
+        x: 360,
+        y: 310,
+        width: 200,
+        height: 0,
+        points: [
+          [0, 0],
+          [200, 0],
+        ],
+        start: { id: "moved-source", fixedPoint: [1, 0.5] },
+        end: { id: "moved-target", fixedPoint: [0, 0.5] },
+      },
+    ]) as AtomicSceneElement[];
+    const node = getElement(restored, "moved-source");
+    const target = getElement(restored, "moved-target");
+    const label = getElement(restored, "moved-source__label");
+    const arrow = getElement(restored, "moved-connector");
+    const startPoint = [
+      arrow.x + arrow.points[0][0],
+      arrow.y + arrow.points[0][1],
+    ] as const;
+    const endPoint = [
+      arrow.x + arrow.points.at(-1)[0],
+      arrow.y + arrow.points.at(-1)[1],
+    ] as const;
+
+    expect(label.containerId).toBe(node.id);
+    expect(label.width).toBeGreaterThanOrEqual(88);
+    expect(label.x + label.width / 2).toBeCloseTo(node.x + node.width / 2);
+    expect(label.y + label.height / 2).toBeCloseTo(node.y + node.height / 2);
+    expect(arrow.startBinding?.elementId).toBe(node.id);
+    expect(arrow.endBinding?.elementId).toBe(target.id);
+    expectPointOnElementBoundary(startPoint, node);
+    expectPointOnElementBoundary(endPoint, target);
+  });
+
   test("add_edge creates an arrow with bidirectional references and an auditable diff", () => {
     const source = asAtomicElements(createAtomicScene());
     const snapshot = structuredClone(source);
@@ -178,37 +259,41 @@ describe("atomic scene editing", () => {
     const updatedLabel = getElement(result.elements, label.id as string);
 
     expect(updatedLabel).toMatchObject({
-      text: "updated edge label",
       originalText: "updated edge label",
       containerId: edge.id,
-      x: label.x,
-      y: label.y,
-      width: label.width,
-      height: label.height,
       version: label.version + 1,
     });
+    expect(updatedLabel.text.replace("\n", " ")).toBe("updated edge label");
+    expect(updatedLabel.width).toBeGreaterThan(label.width);
+    expect(updatedLabel.height).toBeGreaterThanOrEqual(label.height);
     expect(updatedEdge).toEqual(edge);
-    expect(result.diff.direct).toEqual(
+    expect(result.diff.direct).toEqual([
+      expect.objectContaining({
+        elementId: label.id,
+        field: "originalText",
+        before: label.originalText,
+        after: "updated edge label",
+      }),
+    ]);
+    expect(result.diff.derived).toContainEqual(
+      expect.objectContaining({
+        elementId: label.id,
+        field: "text",
+        before: label.text,
+        after: updatedLabel.text,
+      }),
+    );
+    expect(result.diff.derived).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          elementId: label.id,
-          field: "text",
-          before: label.text,
-          after: "updated edge label",
-        }),
-        expect.objectContaining({
-          elementId: label.id,
-          field: "originalText",
-          before: label.originalText,
-          after: "updated edge label",
-        }),
+        expect.objectContaining({ elementId: label.id, field: "width" }),
+        expect.objectContaining({ elementId: label.id, field: "height" }),
+        expect.objectContaining({ elementId: label.id, field: "x" }),
+        expect.objectContaining({ elementId: label.id, field: "y" }),
+        expect.objectContaining({ elementId: label.id, field: "updated" }),
+        expect.objectContaining({ elementId: label.id, field: "version" }),
+        expect.objectContaining({ elementId: label.id, field: "versionNonce" }),
       ]),
     );
-    expect(result.diff.derived.map(({ field }) => field).sort()).toEqual([
-      "updated",
-      "version",
-      "versionNonce",
-    ]);
     assertAtomicSceneBidirectionalBindings(result.elements as never);
     expectCompleteDiff(source, result);
     expectUnrelatedElementPreserved(source, result);
@@ -240,12 +325,15 @@ describe("atomic scene editing", () => {
       text: "Updated Gamma",
       originalText: "Updated Gamma",
       containerId: node.id,
-      x: label.x,
-      y: label.y,
-      width: label.width,
-      height: label.height,
       version: label.version + 1,
     });
+    expect(updatedLabel.width).toBeGreaterThan(label.width);
+    expect(updatedLabel.x + updatedLabel.width / 2).toBeCloseTo(
+      node.x + node.width / 2,
+    );
+    expect(updatedLabel.y + updatedLabel.height / 2).toBeCloseTo(
+      node.y + node.height / 2,
+    );
     expect(result.affectedElementIds).toEqual([label.id]);
     expect(result.diff.direct.every(({ operationIndex }) => operationIndex === 0)).toBe(
       true,

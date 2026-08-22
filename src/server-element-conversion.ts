@@ -213,6 +213,32 @@ function createBoundText(
   };
 }
 
+export function deriveBoundTextDimensions(
+  textElement: any,
+  container: any,
+): { text: string; width: number; height: number } {
+  const fontSize = textElement.fontSize ?? 20;
+  const originalText = String(textElement.originalText ?? textElement.text ?? "");
+  const maxWidth = getBoundTextMaxWidth(container);
+  const text = wrapText(
+    originalText,
+    fontSize,
+    Math.max(maxWidth - TEXT_HORIZONTAL_SAFETY_PADDING, fontSize),
+  );
+  const lines = text.split("\n");
+  return {
+    text,
+    width: Math.max(
+      ...lines.map(
+        (line) =>
+          measureLineWidth(line, fontSize) + TEXT_HORIZONTAL_SAFETY_PADDING,
+      ),
+      fontSize,
+    ),
+    height: Math.max(lines.length, 1) * fontSize * (textElement.lineHeight ?? 1.2),
+  };
+}
+
 function centerBoundTextElements(elements: any[], bindingTargets: any[]): any[] {
   const sceneIds = new Set(elements.map((element) => element.id));
   const byId = new Map(

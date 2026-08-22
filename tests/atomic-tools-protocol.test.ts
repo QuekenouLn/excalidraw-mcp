@@ -241,6 +241,60 @@ describe("Atomic scene tools MCP protocol", () => {
     );
   });
 
+  test("reopens a saved high-version edit with refreshed bound geometry", async () => {
+    const highVersionScene = createAtomicScene().map((element, index) => ({
+      ...element,
+      version: 180 + index * 5,
+      versionNonce: 8000 + index * 11,
+    }));
+    const highVersionById = mapElementsById(highVersionScene as never);
+    const staleLabel = highVersionById.get(ATOMIC_SCENE_IDS.nodeTexts.c)! as any;
+    staleLabel.x = -300;
+    staleLabel.y = -200;
+    staleLabel.width = 4;
+    await store.save(SOURCE_CHECKPOINT_ID, { elements: highVersionScene as never });
+    const target = highVersionById.get(ATOMIC_SCENE_IDS.nodes.c)!;
+    const revision = await readSourceRevision();
+
+    const update = await client.callTool({
+      name: "apply_scene_operations",
+      arguments: {
+        checkpointId: SOURCE_CHECKPOINT_ID,
+        expectedRevision: revision,
+        operations: [
+          {
+            type: "set_node_label",
+            node: {
+              id: target.id,
+              version: target.version,
+              versionNonce: target.versionNonce,
+            },
+            text: "Delta",
+          },
+        ],
+      },
+    });
+
+    expect(update.isError).not.toBe(true);
+    const checkpointId = (update.structuredContent as any).checkpointId;
+    const reopened = await store.load(checkpointId);
+    const restoredById = mapElementsById(reopened!.elements as never);
+    const node = restoredById.get(ATOMIC_SCENE_IDS.nodes.c)! as any;
+    const label = restoredById.get(ATOMIC_SCENE_IDS.nodeTexts.c)! as any;
+    const arrow = restoredById.get(ATOMIC_SCENE_IDS.arrows.forward)! as any;
+
+    expect(label).toMatchObject({
+      text: "Delta",
+      originalText: "Delta",
+      containerId: node.id,
+    });
+    expect(label.width).toBeGreaterThanOrEqual(58);
+    expect(label.x + label.width / 2).toBeCloseTo(node.x + node.width / 2);
+    expect(label.y + label.height / 2).toBeCloseTo(node.y + node.height / 2);
+    expect(arrow.startBinding?.elementId).toBe(ATOMIC_SCENE_IDS.nodes.a);
+    expect(arrow.endBinding?.elementId).toBe(ATOMIC_SCENE_IDS.nodes.b);
+  });
+
   test("rejects revision conflicts and operation failures without saving", async () => {
     const sourceBefore = await store.load(SOURCE_CHECKPOINT_ID);
     const target = mapElementsById(createAtomicScene()).get(

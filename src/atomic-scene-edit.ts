@@ -1,3 +1,9 @@
+import {
+  computeNativeBoundTextPosition,
+  refreshNativeBoundArrows,
+} from "./native-derived-geometry.js";
+import { deriveBoundTextDimensions } from "./server-element-conversion.js";
+
 export const ATOMIC_SCENE_EDIT_ERROR_CODES = {
   INVALID_ARGUMENT: "INVALID_ARGUMENT",
   INVALID_SCENE: "INVALID_SCENE",
@@ -185,6 +191,7 @@ export function applyAtomicSceneEdit(
   const attributions = new Map<string, Map<string, ChangeAttribution>>();
   const changedExistingIds = new Set<string>();
   const newElementIds = new Set<string>();
+  const geometryTriggers = new Map<string, ChangeAttribution>();
 
   const setField = (
     element: AtomicSceneElement,
@@ -256,7 +263,23 @@ export function applyAtomicSceneEdit(
       kind: "direct",
       operationIndex: operation.operationIndex,
     });
+    geometryTriggers.set(operation.targetId, {
+      kind: "derived",
+      operationIndex: operation.operationIndex,
+    });
+    geometryTriggers.set(operation.textId, {
+      kind: "derived",
+      operationIndex: operation.operationIndex,
+    });
   }
+
+  redrawDerivedGeometry(
+    workingElements,
+    workingById,
+    geometryTriggers,
+    attributions,
+    setField,
+  );
 
   for (const elementId of changedExistingIds) {
     const element = workingById.get(elementId) as AtomicSceneElement;
@@ -312,6 +335,96 @@ export function applyAtomicSceneEdit(
 
 export const applyAtomicSceneEdits = applyAtomicSceneEdit;
 export const applySceneOperations = applyAtomicSceneEdit;
+
+function redrawDerivedGeometry(
+  workingElements: readonly AtomicSceneElement[],
+  workingById: Map<string, AtomicSceneElement>,
+  geometryTriggers: Map<string, ChangeAttribution>,
+  attributions: Map<string, Map<string, ChangeAttribution>>,
+  setField: (
+    element: AtomicSceneElement,
+    field: string,
+    value: unknown,
+    attribution: ChangeAttribution,
+  ) => void,
+): void {
+  if (geometryTriggers.size === 0) return;
+
+  const redrawById = new Map<string, AtomicSceneElement>();
+  for (const element of workingElements) {
+    if (typeof element.id === "string" && !PSEUDO_TYPES.has(element.type)) {
+      redrawById.set(element.id, deepClone(element));
+    }
+  }
+  for (const [elementId] of geometryTriggers) {
+    const element = redrawById.get(elementId);
+    if (!element) continue;
+    if (element.type === "text" && typeof element.containerId === "string") {
+      const container = redrawById.get(element.containerId);
+      if (container) {
+        const dimensions = deriveBoundTextDimensions(element, container);
+        Object.assign(element, dimensions);
+        Object.assign(
+          element,
+          computeNativeBoundTextPosition(container, element, redrawById),
+        );
+      }
+    }
+  }
+  refreshNativeBoundArrows(redrawById, geometryTriggers.keys());
+
+  for (const redrawn of redrawById.values()) {
+    const working = workingById.get(redrawn.id as string);
+    if (!working) continue;
+    const attribution = resolveGeometryAttribution(
+      redrawn,
+      geometryTriggers,
+      attributions,
+    );
+    if (!attribution) continue;
+    for (const field of Object.keys(redrawn)) {
+      if (
+        field === "version" ||
+        field === "versionNonce" ||
+        field === "updated"
+      ) {
+        continue;
+      }
+      setField(working, field, redrawn[field], {
+        kind: "derived",
+        operationIndex: attribution.operationIndex,
+      });
+    }
+  }
+}
+
+function resolveGeometryAttribution(
+  element: AtomicSceneElement,
+  geometryTriggers: Map<string, ChangeAttribution>,
+  attributions: Map<string, Map<string, ChangeAttribution>>,
+): ChangeAttribution | null {
+  const candidates = [
+    geometryTriggers.get(element.id as string),
+    typeof element.containerId === "string"
+      ? geometryTriggers.get(element.containerId)
+      : undefined,
+    typeof element.startBinding?.elementId === "string"
+      ? geometryTriggers.get(element.startBinding.elementId)
+      : undefined,
+    typeof element.endBinding?.elementId === "string"
+      ? geometryTriggers.get(element.endBinding.elementId)
+      : undefined,
+  ].filter((candidate): candidate is ChangeAttribution => Boolean(candidate));
+  const existing = attributions.get(element.id as string);
+  if (existing) {
+    candidates.push(firstAttributionForElement(attributions, element.id as string));
+  }
+  return (
+    candidates.sort(
+      (left, right) => left.operationIndex - right.operationIndex,
+    )[0] ?? null
+  );
+}
 
 function prevalidateOperations(
   operations: readonly AtomicSceneEditOperation[],
