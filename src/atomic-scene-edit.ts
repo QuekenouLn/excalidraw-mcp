@@ -199,7 +199,9 @@ export function applyAtomicSceneEdit(
     value: unknown,
     attribution: ChangeAttribution,
   ) => {
-    if (isDeepEqual(element[field], value)) return;
+    if (isDeepEqual(element[field], value)) {
+      return;
+    }
     element[field] = deepClone(value);
     markAttribution(attributions, element.id as string, field, attribution);
     if (!newElementIds.has(element.id as string)) {
@@ -348,7 +350,9 @@ function redrawDerivedGeometry(
     attribution: ChangeAttribution,
   ) => void,
 ): void {
-  if (geometryTriggers.size === 0) return;
+  if (geometryTriggers.size === 0) {
+    return;
+  }
 
   const redrawById = new Map<string, AtomicSceneElement>();
   for (const element of workingElements) {
@@ -358,7 +362,9 @@ function redrawDerivedGeometry(
   }
   for (const [elementId] of geometryTriggers) {
     const element = redrawById.get(elementId);
-    if (!element) continue;
+    if (!element) {
+      continue;
+    }
     if (element.type === "text" && typeof element.containerId === "string") {
       const container = redrawById.get(element.containerId);
       if (container) {
@@ -375,13 +381,17 @@ function redrawDerivedGeometry(
 
   for (const redrawn of redrawById.values()) {
     const working = workingById.get(redrawn.id as string);
-    if (!working) continue;
+    if (!working) {
+      continue;
+    }
     const attribution = resolveGeometryAttribution(
       redrawn,
       geometryTriggers,
       attributions,
     );
-    if (!attribution) continue;
+    if (!attribution) {
+      continue;
+    }
     for (const field of Object.keys(redrawn)) {
       if (
         field === "version" ||
@@ -417,7 +427,9 @@ function resolveGeometryAttribution(
   ].filter((candidate): candidate is ChangeAttribution => Boolean(candidate));
   const existing = attributions.get(element.id as string);
   if (existing) {
-    candidates.push(firstAttributionForElement(attributions, element.id as string));
+    candidates.push(
+      firstAttributionForElement(attributions, element.id as string),
+    );
   }
   return (
     candidates.sort(
@@ -705,7 +717,9 @@ function assertExpectation(
 ): void {
   for (const field of ["version", "versionNonce"] as const) {
     const expected = expectation[field];
-    if (expected === undefined) continue;
+    if (expected === undefined) {
+      continue;
+    }
     if (!Number.isInteger(expected)) {
       fail(
         ATOMIC_SCENE_EDIT_ERROR_CODES.INVALID_ARGUMENT,
@@ -756,7 +770,9 @@ function resolveBoundText(
   assertBoundElements(container, operationIndex);
   const candidateIds = new Set<string>();
   for (const boundElement of container.boundElements ?? []) {
-    if (boundElement.type !== "text") continue;
+    if (boundElement.type !== "text") {
+      continue;
+    }
     if (typeof boundElement.id !== "string") {
       fail(
         ATOMIC_SCENE_EDIT_ERROR_CODES.INVALID_BINDING,
@@ -971,7 +987,9 @@ function pickEdgeInput(
   ];
   const input: Record<string, unknown> = {};
   for (const field of fields) {
-    if (operation[field] !== undefined) input[field] = operation[field];
+    if (operation[field] !== undefined) {
+      input[field] = operation[field];
+    }
   }
   return input;
 }
@@ -1003,7 +1021,9 @@ function validateAffectedBindings(
 ): void {
   for (const elementId of attributions.keys()) {
     const element = elementsById.get(elementId);
-    if (!element || element.isDeleted) continue;
+    if (!element || element.isDeleted) {
+      continue;
+    }
     if (element.type === "arrow") {
       validateArrowEndpoint(element, "startBinding", elementsById);
       validateArrowEndpoint(element, "endBinding", elementsById);
@@ -1063,7 +1083,9 @@ function validateArrowEndpoint(
   elementsById: Map<string, AtomicSceneElement>,
 ): void {
   const binding = arrow[field];
-  if (!binding) return;
+  if (!binding) {
+    return;
+  }
   const target = elementsById.get(binding.elementId);
   if (
     !target ||
@@ -1110,7 +1132,9 @@ function buildFieldDiffs(
     for (const field of [...fields].sort()) {
       const beforeValue = before?.[field];
       const afterValue = element[field];
-      if (isDeepEqual(beforeValue, afterValue)) continue;
+      if (isDeepEqual(beforeValue, afterValue)) {
+        continue;
+      }
       const attribution = getAttribution(attributions, element.id, field);
       const entry = {
         operationIndex: attribution.operationIndex,
@@ -1180,7 +1204,9 @@ function setMetadataField(
   attribution: ChangeAttribution,
   attributions: Map<string, Map<string, ChangeAttribution>>,
 ): void {
-  if (element[field] === value) return;
+  if (element[field] === value) {
+    return;
+  }
   element[field] = value;
   markAttribution(attributions, element.id as string, field, {
     kind: "derived",
@@ -1202,7 +1228,9 @@ function indexElements(
       );
     }
     if (typeof element.id !== "string" || element.id.length === 0) {
-      if (PSEUDO_TYPES.has(element.type)) continue;
+      if (PSEUDO_TYPES.has(element.type)) {
+        continue;
+      }
       fail(
         ATOMIC_SCENE_EDIT_ERROR_CODES.INVALID_SCENE,
         `Scene element at index ${index} has no valid id.`,
@@ -1307,7 +1335,9 @@ function readFixedPoint(
   value: unknown,
   operationIndex: number,
 ): [number, number] | null {
-  if (value === undefined || value === null) return null;
+  if (value === undefined || value === null) {
+    return null;
+  }
   if (
     !Array.isArray(value) ||
     value.length !== 2 ||
@@ -1442,13 +1472,19 @@ function optionalObject(value: unknown): Record<string, unknown> | null {
 }
 
 function deepClone<T>(value: T, seen = new WeakMap<object, unknown>()): T {
-  if (value === null || typeof value !== "object") return value;
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
   const cached = seen.get(value as object);
-  if (cached) return cached as T;
+  if (cached) {
+    return cached as T;
+  }
   if (Array.isArray(value)) {
     const clone: unknown[] = [];
     seen.set(value, clone);
-    for (const item of value) clone.push(deepClone(item, seen));
+    for (const item of value) {
+      clone.push(deepClone(item, seen));
+    }
     return clone as T;
   }
   const clone: Record<string, unknown> = {};
@@ -1460,9 +1496,15 @@ function deepClone<T>(value: T, seen = new WeakMap<object, unknown>()): T {
 }
 
 function isDeepEqual(left: unknown, right: unknown): boolean {
-  if (Object.is(left, right)) return true;
-  if (left === null || right === null) return false;
-  if (typeof left !== "object" || typeof right !== "object") return false;
+  if (Object.is(left, right)) {
+    return true;
+  }
+  if (left === null || right === null) {
+    return false;
+  }
+  if (typeof left !== "object" || typeof right !== "object") {
+    return false;
+  }
   if (Array.isArray(left) || Array.isArray(right)) {
     if (
       !Array.isArray(left) ||

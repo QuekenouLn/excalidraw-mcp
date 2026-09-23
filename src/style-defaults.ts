@@ -33,11 +33,12 @@ export const isCompleteNativeElement = (element: any): boolean => {
     return false;
   }
 
-  return element.type !== "text" || (
-    typeof element.text === "string" &&
-    isFiniteNumber(element.fontSize) &&
-    isFiniteNumber(element.fontFamily) &&
-    isFiniteNumber(element.lineHeight)
+  return (
+    element.type !== "text" ||
+    (typeof element.text === "string" &&
+      isFiniteNumber(element.fontSize) &&
+      isFiniteNumber(element.fontFamily) &&
+      isFiniteNumber(element.lineHeight))
   );
 };
 
@@ -71,7 +72,10 @@ export const applyMcpStyleDefaults = (element: any): any => {
 
   if (STROKED_TYPES.has(styled.type) && !Object.hasOwn(styled, "strokeWidth")) {
     styled.strokeWidth = 1;
-  } else if (styled.type === "freedraw" && !Object.hasOwn(styled, "strokeWidth")) {
+  } else if (
+    styled.type === "freedraw" &&
+    !Object.hasOwn(styled, "strokeWidth")
+  ) {
     styled.strokeWidth = 0.5;
   }
 

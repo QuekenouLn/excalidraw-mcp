@@ -65,7 +65,9 @@ const renderInline = (value: string) => {
     .replace(
       /\[([^\]]+)\]\(([^)]+)\)/g,
       (_, label, url) =>
-        `<a href="${sanitizeUrl(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`,
+        `<a href="${sanitizeUrl(
+          url,
+        )}" target="_blank" rel="noopener noreferrer">${label}</a>`,
     )
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/__([^_]+)__/g, "<strong>$1</strong>")
@@ -84,11 +86,15 @@ export const renderMarkdown = (markdown: string) => {
   let code: string[] = [];
 
   const flushParagraph = () => {
-    if (paragraph.length) output.push(`<p>${renderInline(paragraph.join(" "))}</p>`);
+    if (paragraph.length) {
+      output.push(`<p>${renderInline(paragraph.join(" "))}</p>`);
+    }
     paragraph = [];
   };
   const closeList = () => {
-    if (listType) output.push(`</${listType}>`);
+    if (listType) {
+      output.push(`</${listType}>`);
+    }
     listType = null;
   };
 
@@ -147,7 +153,9 @@ export const renderMarkdown = (markdown: string) => {
     }
     paragraph.push(line.trim());
   }
-  if (inCode) output.push(`<pre><code>${escapeHtml(code.join("\n"))}</code></pre>`);
+  if (inCode) {
+    output.push(`<pre><code>${escapeHtml(code.join("\n"))}</code></pre>`);
+  }
   flushParagraph();
   closeList();
   return output.join("\n");

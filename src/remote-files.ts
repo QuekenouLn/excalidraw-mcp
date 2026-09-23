@@ -1,9 +1,15 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import crypto from "node:crypto";
+
 import { z } from "zod/v4";
 
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+
 import type { CheckpointData, CheckpointStore } from "./checkpoint-store.js";
+import {
+  collectSceneWarnings,
+  formatSaveRemoteFileResultText,
+} from "./scene-warnings.js";
 
 const MAX_REMOTE_BYTES = 5 * 1024 * 1024;
 const filenameSchema = z
@@ -36,7 +42,8 @@ const remoteBaseUrl = () => {
   return value.replace(/\/$/, "");
 };
 
-const fileUrl = (name: string) => `${remoteBaseUrl()}/files/${encodeURIComponent(name)}`;
+const fileUrl = (name: string) =>
+  `${remoteBaseUrl()}/files/${encodeURIComponent(name)}`;
 
 const request = async (url: string, init?: RequestInit) => {
   const response = await fetch(url, {
@@ -44,7 +51,9 @@ const request = async (url: string, init?: RequestInit) => {
     signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) {
-    throw new Error((await response.text()) || `Remote storage returned ${response.status}`);
+    throw new Error(
+      (await response.text()) || `Remote storage returned ${response.status}`,
+    );
   }
   return response;
 };
@@ -54,11 +63,15 @@ const errorResult = (error: unknown): CallToolResult => ({
   isError: true,
 });
 
-export function registerRemoteFileTools(server: McpServer, store: CheckpointStore): void {
+export function registerRemoteFileTools(
+  server: McpServer,
+  store: CheckpointStore,
+): void {
   server.registerTool(
     "list_remote_files",
     {
-      description: "List persistent .excalidraw files stored in the user's private remote file service.",
+      description:
+        "List persistent .excalidraw files stored in the user's private remote file service.",
       annotations: { readOnlyHint: true },
       _meta: { ui: { visibility: ["model"] } },
     },
@@ -79,7 +92,8 @@ export function registerRemoteFileTools(server: McpServer, store: CheckpointStor
   server.registerTool(
     "open_remote_file",
     {
-      description: "Load a persistent .excalidraw file into a checkpoint. Then call create_view with restoreCheckpoint to display or edit it.",
+      description:
+        "Load a persistent .excalidraw file into a checkpoint. Then call create_view with restoreCheckpoint to display or edit it.",
       inputSchema: { name: filenameSchema },
       annotations: { readOnlyHint: true },
       _meta: { ui: { visibility: ["model"] } },
@@ -87,19 +101,29 @@ export function registerRemoteFileTools(server: McpServer, store: CheckpointStor
     async ({ name }): Promise<CallToolResult> => {
       try {
         const response = await request(fileUrl(name));
-        const contentLength = Number(response.headers.get("Content-Length") || 0);
+        const contentLength = Number(
+          response.headers.get("Content-Length") || 0,
+        );
         if (contentLength > MAX_REMOTE_BYTES) {
-          throw new Error(`Remote file exceeds ${MAX_REMOTE_BYTES} byte MCP limit`);
+          throw new Error(
+            `Remote file exceeds ${MAX_REMOTE_BYTES} byte MCP limit`,
+          );
         }
         const raw = await response.text();
         if (raw.length > MAX_REMOTE_BYTES) {
-          throw new Error(`Remote file exceeds ${MAX_REMOTE_BYTES} byte MCP limit`);
+          throw new Error(
+            `Remote file exceeds ${MAX_REMOTE_BYTES} byte MCP limit`,
+          );
         }
         const document = JSON.parse(raw) as ExcalidrawDocument;
-        if (document.type !== "excalidraw" || !Array.isArray(document.elements)) {
+        if (
+          document.type !== "excalidraw" ||
+          !Array.isArray(document.elements)
+        ) {
           throw new Error("Remote file is not a valid Excalidraw document");
         }
-        const revision = response.headers.get("ETag")?.replaceAll('"', "") || "";
+        const revision =
+          response.headers.get("ETag")?.replaceAll('"', "") || "";
         const checkpointId = crypto.randomUUID().replace(/-/g, "").slice(0, 18);
         const checkpoint: CheckpointData = {
           elements: document.elements,
@@ -124,7 +148,12 @@ export function registerRemoteFileTools(server: McpServer, store: CheckpointStor
           hasFiles: Object.keys(document.files || {}).length > 0,
         };
         return {
-          content: [{ type: "text", text: `Opened ${name}. Call create_view with [{"type":"restoreCheckpoint","id":"${checkpointId}"}] to display it.` }],
+          content: [
+            {
+              type: "text",
+              text: `Opened ${name}. Call create_view with [{"type":"restoreCheckpoint","id":"${checkpointId}"}] to display it.`,
+            },
+          ],
           structuredContent: result,
         };
       } catch (error) {
@@ -136,11 +165,15 @@ export function registerRemoteFileTools(server: McpServer, store: CheckpointStor
   server.registerTool(
     "save_remote_file",
     {
-      description: "Persist a checkpoint as a complete .excalidraw file while preserving appState and embedded files from the opened document.",
+      description:
+        "Persist a checkpoint as a complete .excalidraw file while preserving appState and embedded files from the opened document.",
       inputSchema: {
         name: filenameSchema,
         checkpointId: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/),
-        expectedRevision: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+        expectedRevision: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/)
+          .optional(),
       },
       annotations: {
         readOnlyHint: false,
@@ -149,16 +182,24 @@ export function registerRemoteFileTools(server: McpServer, store: CheckpointStor
       },
       _meta: { ui: { visibility: ["model"] } },
     },
-    async ({ name, checkpointId, expectedRevision }): Promise<CallToolResult> => {
+    async ({
+      name,
+      checkpointId,
+      expectedRevision,
+    }): Promise<CallToolResult> => {
       try {
         const checkpoint = await store.load(checkpointId);
         if (!checkpoint) {
           throw new Error(`Checkpoint "${checkpointId}" not found`);
         }
         const isOriginalFile = checkpoint.remote?.name === name;
-        const revision = expectedRevision || (isOriginalFile ? checkpoint.remote?.revision : undefined);
+        const revision =
+          expectedRevision ||
+          (isOriginalFile ? checkpoint.remote?.revision : undefined);
         if (isOriginalFile && !revision) {
-          throw new Error("expectedRevision is required when overwriting a remote file");
+          throw new Error(
+            "expectedRevision is required when overwriting a remote file",
+          );
         }
         const base = checkpoint.remote?.document;
         const document: ExcalidrawDocument = {
@@ -197,9 +238,68 @@ export function registerRemoteFileTools(server: McpServer, store: CheckpointStor
             },
           },
         });
+        const warnings = collectSceneWarnings(checkpoint.elements);
         return {
-          content: [{ type: "text", text: `Saved ${name} at revision ${saved.revision}.` }],
-          structuredContent: { name, revision: saved.revision, checkpointId },
+          content: [
+            {
+              type: "text",
+              text: formatSaveRemoteFileResultText(
+                name,
+                saved.revision,
+                checkpointId,
+                warnings,
+              ),
+            },
+          ],
+          structuredContent: {
+            name,
+            revision: saved.revision,
+            checkpointId,
+            warnings,
+          },
+        };
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "rename_remote_file",
+    {
+      description:
+        "Rename a persistent remote .excalidraw file without changing its contents or revision.",
+      inputSchema: {
+        name: filenameSchema,
+        newName: filenameSchema,
+        expectedRevision: z.string().regex(/^[a-f0-9]{64}$/),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+      },
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async ({ name, newName, expectedRevision }): Promise<CallToolResult> => {
+      try {
+        const response = await request(fileUrl(name), {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "If-Match": expectedRevision,
+          },
+          body: JSON.stringify({ name: newName }),
+        });
+        const renamed = (await response.json()) as RemoteFile;
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Renamed ${name} to ${renamed.name} at revision ${renamed.revision}.`,
+            },
+          ],
+          structuredContent: renamed,
         };
       } catch (error) {
         return errorResult(error);
@@ -210,13 +310,16 @@ export function registerRemoteFileTools(server: McpServer, store: CheckpointStor
   server.registerTool(
     "delete_remote_file",
     {
-      description: "Permanently delete a remote .excalidraw file. Call this only after the user explicitly agrees to delete the named file. Requires the latest revision from list_remote_files.",
+      description:
+        "Permanently delete a remote .excalidraw file. Call this only after the user explicitly agrees to delete the named file. Requires the latest revision from list_remote_files.",
       inputSchema: {
         name: filenameSchema,
         expectedRevision: z.string().regex(/^[a-f0-9]{64}$/),
-        confirmed: z.literal(true).describe(
-          "Must be true only after the user explicitly confirms deletion of this named file.",
-        ),
+        confirmed: z
+          .literal(true)
+          .describe(
+            "Must be true only after the user explicitly confirms deletion of this named file.",
+          ),
       },
       annotations: {
         readOnlyHint: false,

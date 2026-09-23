@@ -3,6 +3,7 @@ import {
   FONT_FAMILY,
   restoreElements,
 } from "@excalidraw/excalidraw";
+
 import {
   applyMcpStyleDefaults,
   applyMcpTextAlignment,
@@ -13,11 +14,10 @@ import {
 (FONT_FAMILY as any)["Maple Mono NF CN"] = MCP_DEFAULT_FONT_FAMILY;
 
 export function refreshRestoredElements(elements: any[]): any[] {
-  const restored = restoreElements(
-    elements,
-    null,
-    { refreshDimensions: true, repairBindings: true },
-  );
+  const restored = restoreElements(elements, null, {
+    refreshDimensions: true,
+    repairBindings: true,
+  });
   const elementsMap = new Map(
     restored.map((element) => [element.id, element]),
   ) as any;
@@ -45,11 +45,7 @@ export function convertRawElements(
   elements: any[],
   { centerNewText = true }: { centerNewText?: boolean } = {},
 ): any[] {
-  const pseudoTypes = new Set([
-    "cameraUpdate",
-    "delete",
-    "restoreCheckpoint",
-  ]);
+  const pseudoTypes = new Set(["cameraUpdate", "delete", "restoreCheckpoint"]);
   const pseudos = elements.filter((element) => pseudoTypes.has(element.type));
   const real = elements.filter((element) => !pseudoTypes.has(element.type));
   const isNativeScene = real.every(isCompleteNativeElement);
@@ -63,9 +59,7 @@ export function convertRawElements(
   const withDefaults = real.map((input) => {
     const element = applyMcpStyleDefaults(input);
     const normalized =
-      element.type === "arrow"
-        ? normalizeArrowBindings(element)
-        : element;
+      element.type === "arrow" ? normalizeArrowBindings(element) : element;
     return normalized.label
       ? {
           ...normalized,

@@ -188,7 +188,9 @@ const isTextContainer = (element: Readonly<Record<string, any>>) =>
   element.type === "ellipse" ||
   element.type === "arrow";
 
-const readVersion = (element: Readonly<Record<string, any>>): ElementVersion => ({
+const readVersion = (
+  element: Readonly<Record<string, any>>,
+): ElementVersion => ({
   version: typeof element.version === "number" ? element.version : null,
   versionNonce:
     typeof element.versionNonce === "number" ? element.versionNonce : null,
@@ -205,20 +207,17 @@ const readText = (element: Readonly<Record<string, any>>) => {
 };
 
 const createElementIndex = (elements: readonly any[]): ElementIndex => {
-  const allById = new Map<
-    string,
-    readonly Readonly<Record<string, any>>[]
-  >();
-  const liveById = new Map<
-    string,
-    readonly Readonly<Record<string, any>>[]
-  >();
+  const allById = new Map<string, readonly Readonly<Record<string, any>>[]>();
+  const liveById = new Map<string, readonly Readonly<Record<string, any>>[]>();
 
   for (const candidate of elements) {
     if (!isSceneElement(candidate)) {
       continue;
     }
-    allById.set(candidate.id, [...(allById.get(candidate.id) ?? []), candidate]);
+    allById.set(candidate.id, [
+      ...(allById.get(candidate.id) ?? []),
+      candidate,
+    ]);
     if (isLiveElement(candidate)) {
       liveById.set(candidate.id, [
         ...(liveById.get(candidate.id) ?? []),
@@ -235,9 +234,8 @@ const getUniqueIndexedElement = (
   elementId: string,
   includeDeleted: boolean,
 ) => {
-  const candidates = (includeDeleted ? index.allById : index.liveById).get(
-    elementId,
-  ) ?? [];
+  const candidates =
+    (includeDeleted ? index.allById : index.liveById).get(elementId) ?? [];
   if (candidates.length === 0) {
     throw new SceneQueryError(
       "ELEMENT_NOT_FOUND",
@@ -288,8 +286,8 @@ const toBoundTextProjection = (
     typeof element.originalText === "string"
       ? element.originalText
       : typeof element.text === "string"
-        ? element.text
-        : "",
+      ? element.text
+      : "",
   ...readVersion(element),
 });
 
@@ -412,20 +410,21 @@ const inspectBoundTextWithIndex = (
 
   const textElementId = candidateIds.size === 1 ? [...candidateIds][0] : null;
   const textElement = textElementId
-    ? ((index.liveById.get(textElementId) ?? []).find(isTextElement) ?? null)
+    ? (index.liveById.get(textElementId) ?? []).find(isTextElement) ?? null
     : null;
   const ambiguous =
     candidateIds.size > 1 ||
     containers.length > 1 ||
     (textElementId !== null &&
-      (index.liveById.get(textElementId) ?? []).filter(isTextElement).length > 1);
+      (index.liveById.get(textElementId) ?? []).filter(isTextElement).length >
+        1);
   const status = ambiguous
     ? "ambiguous"
     : issues.length > 0
-      ? "broken"
-      : textElement
-        ? "bound"
-        : "none";
+    ? "broken"
+    : textElement
+    ? "bound"
+    : "none";
 
   return {
     status,
@@ -495,8 +494,7 @@ const getBoundTextResolution = (
   return inspectBoundTextWithIndex(index, element);
 };
 
-const readBinding = (value: unknown) =>
-  isRecord(value) ? value : null;
+const readBinding = (value: unknown) => (isRecord(value) ? value : null);
 
 const toElementProjection = (
   index: ElementIndex,
@@ -530,10 +528,10 @@ const normalizeSelector = (selector: SceneElementSelector) => {
   const requestedTypes = Array.isArray(selector.types)
     ? selector.types
     : Array.isArray(selector.type)
-      ? selector.type
-      : typeof selector.type === "string"
-        ? [selector.type]
-        : [];
+    ? selector.type
+    : typeof selector.type === "string"
+    ? [selector.type]
+    : [];
   const types = requestedTypes.length > 0 ? new Set(requestedTypes) : null;
   const limit =
     typeof selector.limit === "number" && Number.isFinite(selector.limit)
@@ -583,10 +581,7 @@ export const querySceneElements = (
     if (!normalized.includeDeleted && !isLiveElement(candidate)) {
       continue;
     }
-    if (
-      !normalized.includeBoundTextElements &&
-      isBoundTextElement(candidate)
-    ) {
+    if (!normalized.includeBoundTextElements && isBoundTextElement(candidate)) {
       continue;
     }
     if (normalized.ids && !normalized.ids.has(candidate.id)) {
@@ -645,11 +640,7 @@ export const resolveSceneElement = (
   selector: SceneElementSelector,
 ) => {
   const normalized = normalizeSelector(selector);
-  if (
-    !normalized.ids &&
-    normalized.text === undefined &&
-    !normalized.types
-  ) {
+  if (!normalized.ids && normalized.text === undefined && !normalized.types) {
     throw new SceneQueryError(
       "INVALID_SELECTOR",
       "An element id, text filter, or type filter is required.",
@@ -732,10 +723,10 @@ const getEndpoint = (
 export const getArrowheadMode = (
   arrow: Readonly<Record<string, any>>,
 ): ArrowheadMode => {
-  const hasStartArrowhead = arrow.startArrowhead !== null &&
-    arrow.startArrowhead !== undefined;
-  const hasEndArrowhead = arrow.endArrowhead !== null &&
-    arrow.endArrowhead !== undefined;
+  const hasStartArrowhead =
+    arrow.startArrowhead !== null && arrow.startArrowhead !== undefined;
+  const hasEndArrowhead =
+    arrow.endArrowhead !== null && arrow.endArrowhead !== undefined;
   if (hasStartArrowhead && hasEndArrowhead) {
     return "both";
   }
@@ -766,7 +757,9 @@ export const getArrowDirection = (
 export const projectSceneGraph = (elements: readonly any[]): SceneGraph => {
   const index = createElementIndex(elements);
   const nodeElements = elements.filter(
-    (candidate): candidate is Readonly<Record<string, any>> & {
+    (
+      candidate,
+    ): candidate is Readonly<Record<string, any>> & {
       id: string;
       type: string;
     } =>
@@ -807,13 +800,13 @@ export const projectSceneGraph = (elements: readonly any[]): SceneGraph => {
       direction === "forward"
         ? [{ from: start, to: end }]
         : direction === "reverse"
-          ? [{ from: end, to: start }]
-          : direction === "bidirectional"
-            ? [
-                { from: start, to: end },
-                { from: end, to: start },
-              ]
-            : [];
+        ? [{ from: end, to: start }]
+        : direction === "bidirectional"
+        ? [
+            { from: start, to: end },
+            { from: end, to: start },
+          ]
+        : [];
     const source = direction === "reverse" ? end : start;
     const target = direction === "reverse" ? start : end;
 

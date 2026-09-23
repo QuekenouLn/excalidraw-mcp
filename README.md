@@ -47,6 +47,7 @@ Restart Claude Desktop.
 ## Usage
 
 Example prompts:
+
 - "Draw a cute cat using excalidraw"
 - "Draw an architecture diagram showing a user connecting to an API server which talks to a database"
 

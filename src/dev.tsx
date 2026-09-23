@@ -8,6 +8,7 @@
  */
 import { createRoot } from "react-dom/client";
 import { useEffect, useMemo, useRef } from "react";
+
 import { ExcalidrawAppCore } from "./mcp-app";
 import { createMockApp, type MockAppControls } from "./dev-mock";
 import "./global.css";
@@ -148,7 +149,9 @@ function DevApp() {
   // Wait one frame for ExcalidrawAppCore's useEffect to attach handlers,
   // then fire initial tool input with sample data.
   useEffect(() => {
-    if (initialized.current) return;
+    if (initialized.current) {
+      return;
+    }
     initialized.current = true;
     // Use requestAnimationFrame to ensure handlers are attached
     requestAnimationFrame(() => {

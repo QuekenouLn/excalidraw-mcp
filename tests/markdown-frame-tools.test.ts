@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import {
   createMarkdownFrameElement,
   deleteMarkdownFrameElements,
@@ -32,7 +33,8 @@ const markdownFrame = () => ({
 describe("Markdown Frame MCP helpers", () => {
   test("creates a native sharp Markdown Frame with safe HTML", () => {
     const frame = createMarkdownFrameElement({
-      markdown: "# Created\n\n<script>alert(1)</script>\n\n[x](javascript:alert(1))",
+      markdown:
+        "# Created\n\n<script>alert(1)</script>\n\n[x](javascript:alert(1))",
       x: 30,
       y: 40,
     });
@@ -78,7 +80,8 @@ describe("Markdown Frame MCP helpers", () => {
   test("replaces source and regenerates safe HTML", () => {
     const updated = updateMarkdownFrameElement(markdownFrame(), {
       operation: "replace",
-      markdown: "# Updated\n\n<script>alert(1)</script>\n\n[x](javascript:alert(1))",
+      markdown:
+        "# Updated\n\n<script>alert(1)</script>\n\n[x](javascript:alert(1))",
       contentScale: 1.2,
     });
     expect(updated.version).toBe(4);
@@ -86,7 +89,9 @@ describe("Markdown Frame MCP helpers", () => {
     expect(updated.customData.markdownFrame.keep).toBe(true);
     expect(updated.customData.markdownFrame.contentScale).toBe(1.2);
     expect(updated.customData.generationData.keep).toBe(true);
-    expect(updated.customData.generationData.html).toContain("<h1>Updated</h1>");
+    expect(updated.customData.generationData.html).toContain(
+      "<h1>Updated</h1>",
+    );
     expect(updated.customData.generationData.html).toContain(
       "&lt;script&gt;alert(1)&lt;/script&gt;",
     );
@@ -99,7 +104,9 @@ describe("Markdown Frame MCP helpers", () => {
       operation: "append",
       markdown: "## New section",
     });
-    expect(appended.customData.markdownFrame.markdown).toEndWith("## New section");
+    expect(appended.customData.markdownFrame.markdown).toEndWith(
+      "## New section",
+    );
 
     const replaced = updateMarkdownFrameElement(markdownFrame(), {
       operation: "find_replace",

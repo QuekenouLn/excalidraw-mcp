@@ -1,16 +1,37 @@
-import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { CallToolResult, ReadResourceResult } from "@modelcontextprotocol/sdk/types.js";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
-import { convertElementsForStorage } from "./server-element-conversion.js";
+
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import {
+  registerAppResource,
+  registerAppTool,
+  RESOURCE_MIME_TYPE,
+} from "@modelcontextprotocol/ext-apps/server";
+
 import { z } from "zod/v4";
-import type { CheckpointStore } from "./checkpoint-store.js";
+
+import { convertElementsForStorage } from "./server-element-conversion.js";
+import {
+  collectSceneWarnings,
+  formatCreateViewResultText,
+} from "./scene-warnings.js";
+import {
+  loadMapleFontMetrics,
+  setMapleFontMetricsBuffer,
+} from "./maple-font-metrics.js";
+
 import { registerAtomicTools } from "./atomic-tools.js";
 import { registerRemoteFileTools } from "./remote-files.js";
 import { registerMarkdownFrameTools } from "./markdown-frame-tools.js";
+
+import type {
+  CallToolResult,
+  ReadResourceResult,
+} from "@modelcontextprotocol/sdk/types.js";
+
+import type { CheckpointStore } from "./checkpoint-store.js";
 
 /** Maximum allowed size for element/data input strings (5 MB). */
 const MAX_INPUT_BYTES = 5 * 1024 * 1024;
@@ -93,7 +114,7 @@ Canvas background is white.
 **Standalone text** (titles, annotations only):
 \`{ "type": "text", "id": "t1", "x": 150, "y": 138, "text": "Hello", "fontSize": 20 }\`
 - x is the LEFT edge of the text. To center text at position cx: set x = cx - estimatedWidth/2
-- estimatedWidth ≈ text.length × fontSize × 0.5
+- MCP measures Maple Mono NF CN glyph advances and adds 35% horizontal safety space
 - MCP fixes textAlign to "center". Continue positioning with x and estimatedWidth because alignment only affects text inside its bounds.
 
 **Arrow**: \`{ "type": "arrow", "id": "a1", "x": 300, "y": 150, "width": 200, "height": 0, "points": [[0,0],[200,0]], "endArrowhead": "arrow" }\`
@@ -408,11 +429,25 @@ Use the Primary Colors from above — they're bright enough on dark backgrounds.
  * Registers all Excalidraw tools and resources on the given McpServer.
  * Shared between local (main.ts) and Vercel (api/mcp.ts) entry points.
  */
-export function registerTools(server: McpServer, distDir: string, store: CheckpointStore): void {
+export function registerTools(
+  server: McpServer,
+  distDir: string,
+  store: CheckpointStore,
+): void {
   const resourceUri = "ui://excalidraw/mcp-app-v2.html";
-  const mapleFontUrl = process.env.MCP_MAPLE_FONT_URL ||
+  const mapleFontUrl =
+    process.env.MCP_MAPLE_FONT_URL ||
     "http://127.0.0.1:5000/fonts/MapleMono/MapleMono-NF-CN-Regular.woff2";
   const mapleFontOrigin = new URL(mapleFontUrl).origin;
+  let mapleFontMetricsReady: Promise<void> | null = null;
+  const ensureMapleFontMetrics = () => {
+    mapleFontMetricsReady ??= process.env.MCP_MAPLE_FONT_PATH
+      ? fs
+          .readFile(process.env.MCP_MAPLE_FONT_PATH)
+          .then((buffer) => setMapleFontMetricsBuffer(buffer))
+      : loadMapleFontMetrics(mapleFontUrl);
+    return mapleFontMetricsReady;
+  };
 
   // ============================================================
   // Tool 1: read_me (call before drawing)
@@ -420,7 +455,8 @@ export function registerTools(server: McpServer, distDir: string, store: Checkpo
   server.registerTool(
     "read_me",
     {
-      description: "Returns the Excalidraw element format reference with color palettes, examples, and tips. Call this BEFORE using create_view for the first time.",
+      description:
+        "Returns the Excalidraw element format reference with color palettes, examples, and tips. Call this BEFORE using create_view for the first time.",
       annotations: { readOnlyHint: true },
     },
     async (): Promise<CallToolResult> => {
@@ -431,7 +467,8 @@ export function registerTools(server: McpServer, distDir: string, store: Checkpo
   // ============================================================
   // Tool 2: create_view (Excalidraw SVG)
   // ============================================================
-  registerAppTool(server,
+  registerAppTool(
+    server,
     "create_view",
     {
       title: "Draw Diagram",
@@ -439,17 +476,39 @@ export function registerTools(server: McpServer, distDir: string, store: Checkpo
 Elements stream in one by one with draw-on animations.
 Call read_me first to learn the element format.`,
       inputSchema: z.object({
-        elements: z.string().describe(
-          "JSON array string of Excalidraw elements. Must be valid JSON — no comments, no trailing commas. Keep compact. Call read_me first for format reference."
-        ),
+        elements: z
+          .string()
+          .describe(
+            "JSON array string of Excalidraw elements. Must be valid JSON — no comments, no trailing commas. Keep compact. Call read_me first for format reference.",
+          ),
       }),
       annotations: { readOnlyHint: true },
       _meta: { ui: { resourceUri } },
     },
     async ({ elements }): Promise<CallToolResult> => {
+      try {
+        await ensureMapleFontMetrics();
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Unable to load Maple Mono font metrics: ${
+                (error as Error).message
+              }`,
+            },
+          ],
+          isError: true,
+        };
+      }
       if (elements.length > MAX_INPUT_BYTES) {
         return {
-          content: [{ type: "text", text: `Elements input exceeds ${MAX_INPUT_BYTES} byte limit. Reduce the number of elements or use checkpoints to build incrementally.` }],
+          content: [
+            {
+              type: "text",
+              text: `Elements input exceeds ${MAX_INPUT_BYTES} byte limit. Reduce the number of elements or use checkpoints to build incrementally.`,
+            },
+          ],
           isError: true,
         };
       }
@@ -458,13 +517,22 @@ Call read_me first to learn the element format.`,
         parsed = JSON.parse(elements);
       } catch (e) {
         return {
-          content: [{ type: "text", text: `Invalid JSON in elements: ${(e as Error).message}. Ensure no comments, no trailing commas, and proper quoting.` }],
+          content: [
+            {
+              type: "text",
+              text: `Invalid JSON in elements: ${
+                (e as Error).message
+              }. Ensure no comments, no trailing commas, and proper quoting.`,
+            },
+          ],
           isError: true,
         };
       }
 
       // Resolve restoreCheckpoint references and save fully resolved state
-      const restoreEl = parsed.find((el: any) => el.type === "restoreCheckpoint");
+      const restoreEl = parsed.find(
+        (el: any) => el.type === "restoreCheckpoint",
+      );
       let resolvedElements: any[];
       let restoredCheckpoint = null;
 
@@ -472,7 +540,12 @@ Call read_me first to learn the element format.`,
         const base = await store.load(restoreEl.id);
         if (!base) {
           return {
-            content: [{ type: "text", text: `Checkpoint "${restoreEl.id}" not found — it may have expired or never existed. Please recreate the diagram from scratch.` }],
+            content: [
+              {
+                type: "text",
+                text: `Checkpoint "${restoreEl.id}" not found — it may have expired or never existed. Please recreate the diagram from scratch.`,
+              },
+            ],
             isError: true,
           };
         }
@@ -481,15 +554,17 @@ Call read_me first to learn the element format.`,
         const deleteIds = new Set<string>();
         for (const el of parsed) {
           if (el.type === "delete") {
-            for (const id of String(el.ids ?? el.id).split(",")) deleteIds.add(id.trim());
+            for (const id of String(el.ids ?? el.id).split(",")) {
+              deleteIds.add(id.trim());
+            }
           }
         }
 
-        const baseFiltered = base.elements.filter((el: any) =>
-          !deleteIds.has(el.id) && !deleteIds.has(el.containerId)
+        const baseFiltered = base.elements.filter(
+          (el: any) => !deleteIds.has(el.id) && !deleteIds.has(el.containerId),
         );
-        const newEls = parsed.filter((el: any) =>
-          el.type !== "restoreCheckpoint" && el.type !== "delete"
+        const newEls = parsed.filter(
+          (el: any) => el.type !== "restoreCheckpoint" && el.type !== "delete",
         );
         const bindingTargetIds = new Set(
           newEls.flatMap((element: any) =>
@@ -519,6 +594,7 @@ Call read_me first to learn the element format.`,
             baseForMerge.length,
           ),
         ];
+        resolvedElements = convertElementsForStorage(resolvedElements);
       } else {
         resolvedElements = convertElementsForStorage(
           parsed.filter((el: any) => el.type !== "delete"),
@@ -528,7 +604,9 @@ Call read_me first to learn the element format.`,
       // Check camera aspect ratios — nudge toward 4:3
       const cameras = parsed.filter((el: any) => el.type === "cameraUpdate");
       const badRatio = cameras.find((c: any) => {
-        if (!c.width || !c.height) return false;
+        if (!c.width || !c.height) {
+          return false;
+        }
         const ratio = c.width / c.height;
         return Math.abs(ratio - 4 / 3) > 0.15;
       });
@@ -541,16 +619,15 @@ Call read_me first to learn the element format.`,
         elements: resolvedElements,
         remote: restoredCheckpoint?.remote,
       });
+      const warnings = collectSceneWarnings(resolvedElements);
       return {
-        content: [{ type: "text", text: `Diagram displayed! Checkpoint id: "${checkpointId}".
-If user asks to create a new diagram - simply create a new one from scratch.
-However, if the user wants to edit something on this diagram "${checkpointId}", take these steps:
-1) read widget context (using read_widget_context tool) to check if user made any manual edits first
-2) decide whether you want to make new diagram from scratch OR - use this one as starting checkpoint:
-  simply start from the first element [{"type":"restoreCheckpoint","id":"${checkpointId}"}, ...your new elements...]
-  this will use same diagram state as the user currently sees, including any manual edits they made in fullscreen, allowing you to add elements on top.
-  To remove elements, use: {"type":"delete","ids":"<id1>,<id2>"}${ratioHint}` }],
-        structuredContent: { checkpointId },
+        content: [
+          {
+            type: "text",
+            text: formatCreateViewResultText(checkpointId, warnings, ratioHint),
+          },
+        ],
+        structuredContent: { checkpointId, warnings },
       };
     },
   );
@@ -559,7 +636,8 @@ However, if the user wants to edit something on this diagram "${checkpointId}", 
   // Tool 3: export_to_excalidraw (server-side proxy for CORS)
   // Called by widget via app.callServerTool(), not by the model.
   // ============================================================
-  registerAppTool(server,
+  registerAppTool(
+    server,
     "export_to_excalidraw",
     {
       description: "Upload diagram to excalidraw.com and return shareable URL.",
@@ -569,7 +647,12 @@ However, if the user wants to edit something on this diagram "${checkpointId}", 
     async ({ json }): Promise<CallToolResult> => {
       if (json.length > MAX_INPUT_BYTES) {
         return {
-          content: [{ type: "text", text: `Export data exceeds ${MAX_INPUT_BYTES} byte limit.` }],
+          content: [
+            {
+              type: "text",
+              text: `Export data exceeds ${MAX_INPUT_BYTES} byte limit.`,
+            },
+          ],
           isError: true,
         };
       }
@@ -579,7 +662,9 @@ However, if the user wants to edit something on this diagram "${checkpointId}", 
         // concatBuffers: [version=1 (4B)] [len₁ (4B)] [data₁] [len₂ (4B)] [data₂] ...
         const concatBuffers = (...bufs: Uint8Array[]): Uint8Array => {
           let total = 4; // version header
-          for (const b of bufs) total += 4 + b.length;
+          for (const b of bufs) {
+            total += 4 + b.length;
+          }
           const out = new Uint8Array(total);
           const dv = new DataView(out.buffer);
           dv.setUint32(0, 1); // CONCAT_BUFFERS_VERSION = 1
@@ -616,21 +701,27 @@ However, if the user wants to edit something on this diagram "${checkpointId}", 
         );
 
         // 4. Encoding metadata (tells excalidraw.com how to decode)
-        const encodingMeta = te.encode(JSON.stringify({
-          version: 2,
-          compression: "pako@1",
-          encryption: "AES-GCM",
-        }));
+        const encodingMeta = te.encode(
+          JSON.stringify({
+            version: 2,
+            compression: "pako@1",
+            encryption: "AES-GCM",
+          }),
+        );
 
         // 5. Outer payload: concatBuffers(encodingMeta, iv, encryptedData)
-        const payload = Buffer.from(concatBuffers(encodingMeta, iv, new Uint8Array(encrypted)));
+        const payload = Buffer.from(
+          concatBuffers(encodingMeta, iv, new Uint8Array(encrypted)),
+        );
 
         // 5. Upload to excalidraw backend
         const res = await fetch("https://json.excalidraw.com/api/v2/post/", {
           method: "POST",
           body: payload,
         });
-        if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+        if (!res.ok) {
+          throw new Error(`Upload failed: ${res.status}`);
+        }
         const { id } = (await res.json()) as { id: string };
 
         // 6. Export key as base64url string
@@ -640,7 +731,9 @@ However, if the user wants to edit something on this diagram "${checkpointId}", 
         return { content: [{ type: "text", text: url }] };
       } catch (err) {
         return {
-          content: [{ type: "text", text: `Export failed: ${(err as Error).message}` }],
+          content: [
+            { type: "text", text: `Export failed: ${(err as Error).message}` },
+          ],
           isError: true,
         };
       }
@@ -650,7 +743,8 @@ However, if the user wants to edit something on this diagram "${checkpointId}", 
   // ============================================================
   // Tool 4: save_checkpoint (private — widget only, for user edits)
   // ============================================================
-  registerAppTool(server,
+  registerAppTool(
+    server,
     "save_checkpoint",
     {
       description: "Update checkpoint with user-edited state.",
@@ -660,7 +754,12 @@ However, if the user wants to edit something on this diagram "${checkpointId}", 
     async ({ id, data }): Promise<CallToolResult> => {
       if (data.length > MAX_INPUT_BYTES) {
         return {
-          content: [{ type: "text", text: `Checkpoint data exceeds ${MAX_INPUT_BYTES} byte limit.` }],
+          content: [
+            {
+              type: "text",
+              text: `Checkpoint data exceeds ${MAX_INPUT_BYTES} byte limit.`,
+            },
+          ],
           isError: true,
         };
       }
@@ -673,7 +772,12 @@ However, if the user wants to edit something on this diagram "${checkpointId}", 
         });
         return { content: [{ type: "text", text: "ok" }] };
       } catch (err) {
-        return { content: [{ type: "text", text: `save failed: ${(err as Error).message}` }], isError: true };
+        return {
+          content: [
+            { type: "text", text: `save failed: ${(err as Error).message}` },
+          ],
+          isError: true,
+        };
       }
     },
   );
@@ -681,7 +785,8 @@ However, if the user wants to edit something on this diagram "${checkpointId}", 
   // ============================================================
   // Tool 5: read_checkpoint (private — widget only)
   // ============================================================
-  registerAppTool(server,
+  registerAppTool(
+    server,
     "read_checkpoint",
     {
       description: "Read checkpoint state for restore.",
@@ -691,10 +796,17 @@ However, if the user wants to edit something on this diagram "${checkpointId}", 
     async ({ id }): Promise<CallToolResult> => {
       try {
         const data = await store.load(id);
-        if (!data) return { content: [{ type: "text", text: "" }] };
+        if (!data) {
+          return { content: [{ type: "text", text: "" }] };
+        }
         return { content: [{ type: "text", text: JSON.stringify(data) }] };
       } catch (err) {
-        return { content: [{ type: "text", text: `read failed: ${(err as Error).message}` }], isError: true };
+        return {
+          content: [
+            { type: "text", text: `read failed: ${(err as Error).message}` },
+          ],
+          isError: true,
+        };
       }
     },
   );
@@ -710,7 +822,8 @@ However, if the user wants to edit something on this diagram "${checkpointId}", 
   };
 
   // Register the single shared resource for all UI tools
-  registerAppResource(server,
+  registerAppResource(
+    server,
     resourceUri,
     resourceUri,
     { mimeType: RESOURCE_MIME_TYPE },
@@ -719,25 +832,27 @@ However, if the user wants to edit something on this diagram "${checkpointId}", 
         await fs.readFile(path.join(distDir, "mcp-app.html"), "utf-8")
       ).replaceAll("__MCP_MAPLE_FONT_URL__", mapleFontUrl);
       return {
-        contents: [{
-          uri: resourceUri,
-          mimeType: RESOURCE_MIME_TYPE,
-          text: html,
-          _meta: {
-            ui: {
-              ...cspMeta.ui,
-              prefersBorder: true,
-              permissions: { clipboardWrite: {} },
+        contents: [
+          {
+            uri: resourceUri,
+            mimeType: RESOURCE_MIME_TYPE,
+            text: html,
+            _meta: {
+              ui: {
+                ...cspMeta.ui,
+                prefersBorder: true,
+                permissions: { clipboardWrite: {} },
+              },
             },
           },
-        }],
+        ],
       };
     },
   );
 
   registerRemoteFileTools(server, store);
   registerMarkdownFrameTools(server, store);
-  registerAtomicTools(server, store);
+  registerAtomicTools(server, store, ensureMapleFontMetrics);
 }
 
 /**

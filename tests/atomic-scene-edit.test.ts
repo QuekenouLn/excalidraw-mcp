@@ -1,5 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
+
 import { describe, expect, test } from "bun:test";
+
 import {
   ATOMIC_SCENE_EDIT_ERROR_CODES,
   AtomicSceneEditError,
@@ -8,6 +10,7 @@ import {
   type AtomicSceneElement,
 } from "../src/atomic-scene-edit";
 import { convertElementsForStorage } from "../src/server-element-conversion";
+
 import {
   ATOMIC_SCENE_IDS,
   assertAtomicSceneBidirectionalBindings,
@@ -37,7 +40,9 @@ const expectCompleteDiff = (
   result: AtomicSceneEditResult,
 ) => {
   const sourceById = new Map(source.map((element) => [element.id, element]));
-  const resultById = new Map(result.elements.map((element) => [element.id, element]));
+  const resultById = new Map(
+    result.elements.map((element) => [element.id, element]),
+  );
   const actualChanges: string[] = [];
 
   for (const element of result.elements) {
@@ -54,15 +59,19 @@ const expectCompleteDiff = (
   }
 
   const diff = [...result.diff.direct, ...result.diff.derived];
-  const reportedChanges = diff.map(({ elementId, field }) =>
-    `${elementId}.${field}`,
+  const reportedChanges = diff.map(
+    ({ elementId, field }) => `${elementId}.${field}`,
   );
   expect(new Set(reportedChanges).size).toBe(reportedChanges.length);
   expect(reportedChanges.sort()).toEqual(actualChanges.sort());
 
   for (const change of diff) {
-    expect(change.before).toEqual(sourceById.get(change.elementId)?.[change.field]);
-    expect(change.after).toEqual(resultById.get(change.elementId)?.[change.field]);
+    expect(change.before).toEqual(
+      sourceById.get(change.elementId)?.[change.field],
+    );
+    expect(change.after).toEqual(
+      resultById.get(change.elementId)?.[change.field],
+    );
   }
 };
 
@@ -211,14 +220,10 @@ describe("atomic scene editing", () => {
     expect(
       updatedEnd?.boundElements?.filter(({ id }) => id === edgeId),
     ).toHaveLength(1);
-    expect(result.affectedElementIds).toEqual([
-      start.id,
-      end.id,
-      edgeId,
-    ]);
-    expect(result.diff.direct.some((change) => change.elementId === edgeId)).toBe(
-      true,
-    );
+    expect(result.affectedElementIds).toEqual([start.id, end.id, edgeId]);
+    expect(
+      result.diff.direct.some((change) => change.elementId === edgeId),
+    ).toBe(true);
     expect(result.diff.derived).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -335,12 +340,12 @@ describe("atomic scene editing", () => {
       node.y + node.height / 2,
     );
     expect(result.affectedElementIds).toEqual([label.id]);
-    expect(result.diff.direct.every(({ operationIndex }) => operationIndex === 0)).toBe(
-      true,
-    );
-    expect(result.diff.derived.every(({ operationIndex }) => operationIndex === 0)).toBe(
-      true,
-    );
+    expect(
+      result.diff.direct.every(({ operationIndex }) => operationIndex === 0),
+    ).toBe(true);
+    expect(
+      result.diff.derived.every(({ operationIndex }) => operationIndex === 0),
+    ).toBe(true);
     assertAtomicSceneBidirectionalBindings(result.elements as never);
     expectCompleteDiff(source, result);
     expectUnrelatedElementPreserved(source, result);
@@ -404,8 +409,8 @@ describe("atomic scene editing", () => {
     expect(error.operationIndex).toBe(1);
     expect(result).toBeUndefined();
     expect(source).toEqual(snapshot);
-    expect(
-      getElement(source, ATOMIC_SCENE_IDS.arrowTexts.forward).text,
-    ).toBe(edgeLabel.text);
+    expect(getElement(source, ATOMIC_SCENE_IDS.arrowTexts.forward).text).toBe(
+      edgeLabel.text,
+    );
   });
 });

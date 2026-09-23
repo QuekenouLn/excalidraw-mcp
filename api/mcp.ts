@@ -1,5 +1,7 @@
-import { createMcpHandler } from "mcp-handler";
 import path from "node:path";
+
+import { createMcpHandler } from "mcp-handler";
+
 import { createVercelStore } from "../src/checkpoint-store.js";
 import { registerTools } from "../src/server.js";
 

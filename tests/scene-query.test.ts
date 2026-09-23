@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import {
   SceneQueryError,
   getSceneElementById,
@@ -9,6 +10,7 @@ import {
   resolveSceneElement,
   resolveSceneElementByText,
 } from "../src/scene-query";
+
 import {
   ATOMIC_SCENE_IDS,
   createAtomicScene,

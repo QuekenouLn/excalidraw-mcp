@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+
 import { MemoryCheckpointStore } from "../src/checkpoint-store";
 import { createMarkdownFrameHtml } from "../src/markdown-frame";
 import { createServer } from "../src/server";
@@ -90,7 +91,8 @@ describe("Markdown Frame MCP protocol", () => {
       name: "create_markdown_frame",
       arguments: {
         checkpointId: "markdown_protocol_source",
-        markdown: "# Created\n\n<script>alert(1)</script>\n\n[x](javascript:alert(1))",
+        markdown:
+          "# Created\n\n<script>alert(1)</script>\n\n[x](javascript:alert(1))",
         x: 500,
         y: 100,
       },
@@ -110,9 +112,14 @@ describe("Markdown Frame MCP protocol", () => {
 
     const get = await client.callTool({
       name: "get_markdown_frame",
-      arguments: { checkpointId: result.checkpointId, frameId: result.frame.id },
+      arguments: {
+        checkpointId: result.checkpointId,
+        frameId: result.frame.id,
+      },
     });
-    expect((get.structuredContent as any).frame.markdown).toContain("# Created");
+    expect((get.structuredContent as any).frame.markdown).toContain(
+      "# Created",
+    );
   });
 
   test("queries, reads, and updates through MCP", async () => {

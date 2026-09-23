@@ -5,12 +5,15 @@
  */
 
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import type { Request, Response } from "express";
+
 import { FileCheckpointStore } from "./checkpoint-store.js";
 import { createServer } from "./server.js";
+
+import type { Request, Response } from "express";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 /**
  * Starts an MCP server with Streamable HTTP transport in stateless mode.

@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+
 import {
   MemoryCheckpointStore,
   type CheckpointData,
   type SaveDerivedCheckpointOptions,
 } from "../src/checkpoint-store";
 import { createServer } from "../src/server";
+
 import {
   ATOMIC_SCENE_IDS,
   createAtomicScene,
@@ -248,11 +250,15 @@ describe("Atomic scene tools MCP protocol", () => {
       versionNonce: 8000 + index * 11,
     }));
     const highVersionById = mapElementsById(highVersionScene as never);
-    const staleLabel = highVersionById.get(ATOMIC_SCENE_IDS.nodeTexts.c)! as any;
+    const staleLabel = highVersionById.get(
+      ATOMIC_SCENE_IDS.nodeTexts.c,
+    )! as any;
     staleLabel.x = -300;
     staleLabel.y = -200;
     staleLabel.width = 4;
-    await store.save(SOURCE_CHECKPOINT_ID, { elements: highVersionScene as never });
+    await store.save(SOURCE_CHECKPOINT_ID, {
+      elements: highVersionScene as never,
+    });
     const target = highVersionById.get(ATOMIC_SCENE_IDS.nodes.c)!;
     const revision = await readSourceRevision();
 

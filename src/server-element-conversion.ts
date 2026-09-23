@@ -1,10 +1,14 @@
-const PSEUDO_TYPES = new Set(["cameraUpdate", "delete", "restoreCheckpoint"]);
-
 import {
   applyMcpStyleDefaults,
   applyMcpTextAlignment,
   isCompleteNativeElement,
 } from "./style-defaults.js";
+import {
+  hasMapleFontMetrics,
+  measureMapleTextWidth,
+} from "./maple-font-metrics.js";
+
+const PSEUDO_TYPES = new Set(["cameraUpdate", "delete", "restoreCheckpoint"]);
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
@@ -22,15 +26,18 @@ export function convertElementsForStorage(
   const real = alignedElements.filter(
     (element) => !PSEUDO_TYPES.has(element.type),
   );
-  if (
-    real.length > 0 &&
-    real.every(isCompleteNativeElement)
-  ) {
-    const centeredElements = centerBoundTextElements(
+  if (real.length > 0 && real.every(isCompleteNativeElement)) {
+    const normalizedElements = normalizeNativeBoundTextWidths(
       alignedElements,
       bindingTargets,
     );
-    return centeredElements.every((element, index) => element === elements[index])
+    const centeredElements = centerBoundTextElements(
+      normalizedElements,
+      bindingTargets,
+    );
+    return centeredElements.every(
+      (element, index) => element === elements[index],
+    )
       ? elements
       : centeredElements;
   }
@@ -51,12 +58,19 @@ export function convertElementsForStorage(
   const labels: any[] = [];
 
   for (const [index, input] of styledElements.entries()) {
-    if (PSEUDO_TYPES.has(input.type)) continue;
-    if (isCompleteNativeElement(input)) continue;
+    if (PSEUDO_TYPES.has(input.type)) {
+      continue;
+    }
+    if (isCompleteNativeElement(input)) {
+      continue;
+    }
     const element = byId.get(input.id);
-    if (!element) continue;
+    if (!element) {
+      continue;
+    }
 
     if (input.label?.text) {
+      expandContainerForLabel(element, input.label);
       const label = createBoundText(
         element,
         input.label,
@@ -68,7 +82,12 @@ export function convertElementsForStorage(
     }
 
     if (input.type === "arrow") {
-      bindArrowEndpoint(element, input.startBinding ?? input.start, "start", byId);
+      bindArrowEndpoint(
+        element,
+        input.startBinding ?? input.start,
+        "start",
+        byId,
+      );
       bindArrowEndpoint(element, input.endBinding ?? input.end, "end", byId);
       normalizeBoundArrowGeometry(element);
     }
@@ -80,6 +99,120 @@ export function convertElementsForStorage(
     [...nativeElements, ...labels],
     bindingTargets,
   );
+}
+
+export type BoundTextWidthViolation = {
+  textId: string;
+  containerId: string;
+  requiredWidth: number;
+  availableWidth: number;
+  deficit: number;
+};
+
+export function getBoundTextWidthViolations(
+  elements: any[],
+  bindingTargets: any[] = [],
+): BoundTextWidthViolation[] {
+  const byId = new Map(
+    [...bindingTargets, ...elements]
+      .filter((element) => element.id)
+      .map((element) => [element.id, element]),
+  );
+
+  return elements.flatMap((element) => {
+    if (element.type !== "text" || !element.containerId) {
+      return [];
+    }
+    const container = byId.get(element.containerId);
+    if (!container || !isFiniteNumber(container.width)) {
+      return [];
+    }
+    const requiredWidth = getRequiredBoundTextWidth(element);
+    const availableWidth = getBoundTextMaxWidth(container);
+    if (requiredWidth <= availableWidth + Number.EPSILON) {
+      return [];
+    }
+    return [
+      {
+        textId: element.id,
+        containerId: container.id,
+        requiredWidth,
+        availableWidth,
+        deficit: requiredWidth - availableWidth,
+      },
+    ];
+  });
+}
+
+function normalizeNativeBoundTextWidths(
+  elements: any[],
+  bindingTargets: any[],
+): any[] {
+  const byId = new Map(
+    [...bindingTargets, ...elements]
+      .filter((element) => element.id)
+      .map((element) => [element.id, element]),
+  );
+  const replacements = new Map<string, any>();
+
+  for (const violation of getBoundTextWidthViolations(
+    elements,
+    bindingTargets,
+  )) {
+    const text = byId.get(violation.textId);
+    const container =
+      replacements.get(violation.containerId) ??
+      byId.get(violation.containerId);
+    if (!text || !container || container.type === "arrow") {
+      continue;
+    }
+    const requiredContainerWidth = getRequiredContainerWidth(
+      container,
+      violation.requiredWidth,
+    );
+    const centerX = container.x + container.width / 2;
+    const normalizedContainer = {
+      ...container,
+      x: centerX - requiredContainerWidth / 2,
+      width: requiredContainerWidth,
+    };
+    const normalizedText = {
+      ...text,
+      width: violation.requiredWidth,
+    };
+    replacements.set(container.id, normalizedContainer);
+    replacements.set(text.id, normalizedText);
+    byId.set(container.id, normalizedContainer);
+    byId.set(text.id, normalizedText);
+  }
+
+  return replacements.size > 0
+    ? elements.map((element) => replacements.get(element.id) ?? element)
+    : elements;
+}
+
+function getRequiredBoundTextWidth(textElement: any): number {
+  const fontSize = textElement.fontSize ?? 20;
+  const lines = String(
+    textElement.text ?? textElement.originalText ?? "",
+  ).split("\n");
+  return Math.max(
+    ...lines.map(
+      (line) =>
+        measureLineWidth(line, fontSize) + TEXT_HORIZONTAL_SAFETY_PADDING,
+    ),
+    fontSize,
+  );
+}
+
+function getRequiredContainerWidth(container: any, textWidth: number): number {
+  if (container.type === "diamond") {
+    return textWidth / 0.7;
+  }
+  if (container.type === "ellipse") {
+    return textWidth / 0.75;
+  }
+  return textWidth + 10;
 }
 
 function createNativeElement(input: any, index: string): any {
@@ -110,7 +243,10 @@ function createNativeElement(input: any, index: string): any {
 
   if (input.type === "arrow") {
     native.roundness = input.roundness ?? null;
-    native.points = input.points ?? [[0, 0], [input.width ?? 100, input.height ?? 0]];
+    native.points = input.points ?? [
+      [0, 0],
+      [input.width ?? 100, input.height ?? 0],
+    ];
     native.startBinding = null;
     native.endBinding = null;
     native.startArrowhead = input.startArrowhead ?? null;
@@ -218,7 +354,9 @@ export function deriveBoundTextDimensions(
   container: any,
 ): { text: string; width: number; height: number } {
   const fontSize = textElement.fontSize ?? 20;
-  const originalText = String(textElement.originalText ?? textElement.text ?? "");
+  const originalText = String(
+    textElement.originalText ?? textElement.text ?? "",
+  );
   const maxWidth = getBoundTextMaxWidth(container);
   const text = wrapText(
     originalText,
@@ -235,11 +373,15 @@ export function deriveBoundTextDimensions(
       ),
       fontSize,
     ),
-    height: Math.max(lines.length, 1) * fontSize * (textElement.lineHeight ?? 1.2),
+    height:
+      Math.max(lines.length, 1) * fontSize * (textElement.lineHeight ?? 1.2),
   };
 }
 
-function centerBoundTextElements(elements: any[], bindingTargets: any[]): any[] {
+function centerBoundTextElements(
+  elements: any[],
+  bindingTargets: any[],
+): any[] {
   const sceneIds = new Set(elements.map((element) => element.id));
   const byId = new Map(
     [...bindingTargets, ...elements]
@@ -249,7 +391,9 @@ function centerBoundTextElements(elements: any[], bindingTargets: any[]): any[] 
   const replacements = new Map<string, any>();
 
   for (const element of elements) {
-    if (element.type !== "text" || !element.containerId) continue;
+    if (element.type !== "text" || !element.containerId) {
+      continue;
+    }
     const container =
       replacements.get(element.containerId) ?? byId.get(element.containerId);
     if (
@@ -305,10 +449,41 @@ function centerBoundTextElements(elements: any[], bindingTargets: any[]): any[] 
 
 function getBoundTextMaxWidth(container: any): number {
   const width = Math.max(container.width ?? 0, 40);
-  if (container.type === "diamond") return width * 0.7;
-  if (container.type === "ellipse") return width * 0.75;
-  if (container.type === "arrow") return Math.max(width - 16, 40);
+  if (container.type === "diamond") {
+    return width * 0.7;
+  }
+  if (container.type === "ellipse") {
+    return width * 0.75;
+  }
+  if (container.type === "arrow") {
+    return Math.max(width - 16, 40);
+  }
   return Math.max(width - 10, 40);
+}
+
+function expandContainerForLabel(container: any, label: any): void {
+  if (container.type === "arrow" || !isFiniteNumber(container.width)) {
+    return;
+  }
+  const fontSize = label.fontSize ?? 20;
+  const lines = String(label.text).split("\n");
+  const textWidth = Math.max(
+    ...lines.map((line) => measureLineWidth(line, fontSize)),
+    fontSize,
+  );
+  const paddedTextWidth = textWidth + TEXT_HORIZONTAL_SAFETY_PADDING;
+  const requiredWidth =
+    container.type === "diamond"
+      ? paddedTextWidth / 0.7
+      : container.type === "ellipse"
+      ? paddedTextWidth / 0.75
+      : paddedTextWidth + 10;
+  if (requiredWidth <= container.width) {
+    return;
+  }
+  const centerX = container.x + container.width / 2;
+  container.width = requiredWidth;
+  container.x = centerX - requiredWidth / 2;
 }
 
 function wrapText(text: string, fontSize: number, maxWidth: number): string {
@@ -319,7 +494,9 @@ function wrapText(text: string, fontSize: number, maxWidth: number): string {
 }
 
 function wrapLine(line: string, fontSize: number, maxWidth: number): string[] {
-  if (measureLineWidth(line, fontSize) <= maxWidth) return [line];
+  if (measureLineWidth(line, fontSize) <= maxWidth) {
+    return [line];
+  }
 
   const segments = getWordSegments(line);
   const lines: string[] = [];
@@ -330,7 +507,9 @@ function wrapLine(line: string, fontSize: number, maxWidth: number): string[] {
       current += segment;
       continue;
     }
-    if (current.trim()) lines.push(current.trimEnd());
+    if (current.trim()) {
+      lines.push(current.trimEnd());
+    }
     current = "";
 
     for (const glyph of Array.from(segment)) {
@@ -342,17 +521,24 @@ function wrapLine(line: string, fontSize: number, maxWidth: number): string[] {
     }
   }
 
-  if (current.trim() || lines.length === 0) lines.push(current.trimEnd());
+  if (current.trim() || lines.length === 0) {
+    lines.push(current.trimEnd());
+  }
   return lines;
 }
 
 function getWordSegments(text: string): string[] {
-  if (typeof Intl.Segmenter !== "function") return Array.from(text);
+  if (typeof Intl.Segmenter !== "function") {
+    return Array.from(text);
+  }
   const segmenter = new Intl.Segmenter("zh-CN", { granularity: "word" });
   return Array.from(segmenter.segment(text), ({ segment }) => segment);
 }
 
 function measureLineWidth(text: string, fontSize: number): number {
+  if (hasMapleFontMetrics()) {
+    return measureMapleTextWidth(text, fontSize);
+  }
   if (process.env.MCP_TEXT_METRICS === "legacy") {
     return Math.max(Array.from(text).length, 1) * fontSize * 0.5;
   }
@@ -364,13 +550,25 @@ function measureLineWidth(text: string, fontSize: number): number {
 }
 
 function getGlyphWidth(glyph: string): number {
-  if (/\s/u.test(glyph)) return 0.35;
-  if (/\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana}|\p{Script=Hangul}/u.test(glyph)) {
+  if (/\s/u.test(glyph)) {
+    return 0.35;
+  }
+  if (
+    /\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana}|\p{Script=Hangul}/u.test(
+      glyph,
+    )
+  ) {
     return 1;
   }
-  if (/\p{Number}/u.test(glyph)) return 0.56;
-  if (/\p{Letter}/u.test(glyph)) return 0.56;
-  if (/\p{Emoji_Presentation}/u.test(glyph)) return 1.2;
+  if (/\p{Number}/u.test(glyph)) {
+    return 0.56;
+  }
+  if (/\p{Letter}/u.test(glyph)) {
+    return 0.56;
+  }
+  if (/\p{Emoji_Presentation}/u.test(glyph)) {
+    return 1.2;
+  }
   return 0.42;
 }
 
@@ -381,9 +579,13 @@ function bindArrowEndpoint(
   byId: Map<string, any>,
 ): void {
   const elementId = binding?.elementId ?? binding?.id;
-  if (!elementId) return;
+  if (!elementId) {
+    return;
+  }
   const target = byId.get(elementId);
-  if (!target) return;
+  if (!target) {
+    return;
+  }
   const fixedPoint = normalizeFixedPoint(
     binding.fixedPoint ?? defaultFixedPoint(endpoint),
   );
@@ -413,8 +615,12 @@ function normalizeFixedPoint(fixedPoint: [number, number]): [number, number] {
 }
 
 function normalizeBoundArrowGeometry(arrow: any): void {
-  if (!arrow.startBinding && !arrow.endBinding) return;
-  if (!Array.isArray(arrow.points) || arrow.points.length < 2) return;
+  if (!arrow.startBinding && !arrow.endBinding) {
+    return;
+  }
+  if (!Array.isArray(arrow.points) || arrow.points.length < 2) {
+    return;
+  }
 
   const points = arrow.points.map((point: [number, number]) => [...point]);
   const lastIndex = points.length - 1;

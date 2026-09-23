@@ -1,9 +1,13 @@
 import crypto from "node:crypto";
+
+import { z } from "zod/v4";
+
+import { createMarkdownFrameHtml } from "./markdown-frame.js";
+
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod/v4";
 import type { CheckpointStore } from "./checkpoint-store.js";
-import { createMarkdownFrameHtml } from "./markdown-frame.js";
+
 
 const MAX_MARKDOWN_BYTES = 1024 * 1024;
 const checkpointIdSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/);
@@ -134,7 +138,7 @@ export const deleteMarkdownFrameElements = (
       const boundElementsChanged =
         Array.isArray(element.boundElements) &&
         boundElements.length !== element.boundElements.length;
-      if (!startWasBound && !endWasBound && !boundElementsChanged) return element;
+      if (!startWasBound && !endWasBound && !boundElementsChanged) {return element;}
       return {
         ...element,
         ...(startWasBound ? { startBinding: null } : {}),
@@ -179,17 +183,17 @@ export const updateMarkdownFrameElement = (
   const current = element.customData.markdownFrame;
   let markdown = current.markdown;
   if (input.operation === "replace") {
-    if (input.markdown === undefined) throw new Error("markdown is required for replace");
+    if (input.markdown === undefined) {throw new Error("markdown is required for replace");}
     markdown = input.markdown;
   } else if (input.operation === "append") {
-    if (input.markdown === undefined) throw new Error("markdown is required for append");
+    if (input.markdown === undefined) {throw new Error("markdown is required for append");}
     markdown = `${markdown}${markdown.endsWith("\n") ? "" : "\n"}${input.markdown}`;
   } else {
-    if (!input.find) throw new Error("find is required for find_replace");
-    if (input.replace === undefined) throw new Error("replace is required for find_replace");
+    if (!input.find) {throw new Error("find is required for find_replace");}
+    if (input.replace === undefined) {throw new Error("replace is required for find_replace");}
     const occurrences = markdown.split(input.find).length - 1;
-    if (occurrences === 0) throw new Error("find text was not found");
-    if (occurrences > 1) throw new Error("find text is not unique");
+    if (occurrences === 0) {throw new Error("find text was not found");}
+    if (occurrences > 1) {throw new Error("find text is not unique");}
     markdown = markdown.replace(input.find, input.replace);
   }
   if (new TextEncoder().encode(markdown).byteLength > MAX_MARKDOWN_BYTES) {
@@ -295,7 +299,7 @@ export function registerMarkdownFrameTools(
     },
     async ({ checkpointId, query, limit }): Promise<CallToolResult> => {
       const checkpoint = await store.load(checkpointId);
-      if (!checkpoint) return errorResult(`Checkpoint "${checkpointId}" not found.`);
+      if (!checkpoint) {return errorResult(`Checkpoint "${checkpointId}" not found.`);}
       const result = { checkpointId, ...queryMarkdownFrames(checkpoint.elements, query, limit) };
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],
@@ -314,11 +318,11 @@ export function registerMarkdownFrameTools(
     },
     async ({ checkpointId, frameId }): Promise<CallToolResult> => {
       const checkpoint = await store.load(checkpointId);
-      if (!checkpoint) return errorResult(`Checkpoint "${checkpointId}" not found.`);
+      if (!checkpoint) {return errorResult(`Checkpoint "${checkpointId}" not found.`);}
       const frame = checkpoint.elements.find(
         (element) => isMarkdownFrame(element) && element.id === frameId,
       );
-      if (!frame) return errorResult(`Markdown Frame "${frameId}" not found.`);
+      if (!frame) {return errorResult(`Markdown Frame "${frameId}" not found.`);}
       const result = { checkpointId, frame: toFrameDto(frame, true) };
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],
@@ -350,11 +354,11 @@ export function registerMarkdownFrameTools(
     },
     async (input): Promise<CallToolResult> => {
       const checkpoint = await store.load(input.checkpointId);
-      if (!checkpoint) return errorResult(`Checkpoint "${input.checkpointId}" not found.`);
+      if (!checkpoint) {return errorResult(`Checkpoint "${input.checkpointId}" not found.`);}
       const index = checkpoint.elements.findIndex(
         (element) => isMarkdownFrame(element) && element.id === input.frameId,
       );
-      if (index < 0) return errorResult(`Markdown Frame "${input.frameId}" not found.`);
+      if (index < 0) {return errorResult(`Markdown Frame "${input.frameId}" not found.`);}
       const current = checkpoint.elements[index] as MarkdownFrameElement;
       const currentVersion = Number.isInteger(current.version) ? current.version : 1;
       if (currentVersion !== input.expectedElementVersion) {
@@ -405,11 +409,11 @@ export function registerMarkdownFrameTools(
     },
     async (input): Promise<CallToolResult> => {
       const checkpoint = await store.load(input.checkpointId);
-      if (!checkpoint) return errorResult(`Checkpoint "${input.checkpointId}" not found.`);
+      if (!checkpoint) {return errorResult(`Checkpoint "${input.checkpointId}" not found.`);}
       const current = checkpoint.elements.find(
         (element) => isMarkdownFrame(element) && element.id === input.frameId,
       ) as MarkdownFrameElement | undefined;
-      if (!current) return errorResult(`Markdown Frame "${input.frameId}" not found.`);
+      if (!current) {return errorResult(`Markdown Frame "${input.frameId}" not found.`);}
       const currentVersion = Number.isInteger(current.version) ? current.version : 1;
       if (currentVersion !== input.expectedElementVersion) {
         return errorResult(

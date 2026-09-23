@@ -31,8 +31,12 @@ async function decodeBase64Audio(base64: string): Promise<AudioBuffer> {
 
 /** Initialize audio buffers. Call once, safe to call multiple times. */
 export async function initPencilAudio(): Promise<void> {
-  if (initialized) return;
-  if (initPromise) return initPromise;
+  if (initialized) {
+    return;
+  }
+  if (initPromise) {
+    return initPromise;
+  }
   initPromise = (async () => {
     try {
       softBuffer = await decodeBase64Audio(PENCIL_STROKE_SOFT);
@@ -46,12 +50,16 @@ export async function initPencilAudio(): Promise<void> {
 
 /** Play a pencil stroke sound for a given element type. */
 export function playStroke(elementType: string): void {
-  if (!initialized || !audioCtx) return;
+  if (!initialized || !audioCtx) {
+    return;
+  }
 
   // Use soft stroke for all element types
   const isLine = elementType === "arrow" || elementType === "line";
   const buffer = softBuffer;
-  if (!buffer) return;
+  if (!buffer) {
+    return;
+  }
 
   // Resume context if suspended (autoplay policy)
   if (audioCtx.state === "suspended") {
@@ -76,7 +84,9 @@ export function playStroke(elementType: string): void {
   gain.gain.setValueAtTime(0, ctx.currentTime);
   gain.gain.linearRampToValueAtTime(baseVolume, ctx.currentTime + 0.03); // quick attack
   // Duration varies by element type
-  const duration = isLine ? 0.3 + Math.random() * 0.3 : 0.2 + Math.random() * 0.4;
+  const duration = isLine
+    ? 0.3 + Math.random() * 0.3
+    : 0.2 + Math.random() * 0.4;
   gain.gain.linearRampToValueAtTime(0, ctx.currentTime + duration); // fade out
 
   // Connect: source → gain → destination

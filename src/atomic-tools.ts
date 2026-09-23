@@ -1,12 +1,12 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import crypto from "node:crypto";
+
 import { z } from "zod/v4";
+
 import {
   CheckpointStoreError,
   computeCheckpointRevision,
 } from "./checkpoint-store.js";
-import type { CheckpointData, CheckpointStore } from "./checkpoint-store.js";
+
 import {
   SceneQueryError,
   querySceneGraph,
@@ -16,6 +16,11 @@ import {
   AtomicSceneEditError,
   applyAtomicSceneEdit,
 } from "./atomic-scene-edit.js";
+
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { CheckpointData, CheckpointStore } from "./checkpoint-store.js";
 
 const checkpointIdSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/);
 const revisionSchema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -167,6 +172,7 @@ const toAtomicOperations = (operations: z.infer<typeof operationSchema>[]) =>
 export function registerAtomicTools(
   server: McpServer,
   store: CheckpointStore,
+  ensureFontMetrics: () => Promise<void> = async () => {},
 ): void {
   server.registerTool(
     "select_scene_elements",
@@ -377,6 +383,7 @@ export function registerAtomicTools(
 
       let transaction;
       try {
+        await ensureFontMetrics();
         transaction = applyAtomicSceneEdit(
           checkpoint.elements,
           toAtomicOperations(input.operations),

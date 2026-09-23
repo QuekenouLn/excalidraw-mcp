@@ -24,10 +24,15 @@ export const refreshNativeBoundArrows = (elementsById, triggerIds) => {
     }
     const start = resolveEndpoint(elementsById, arrow.startBinding);
     const end = resolveEndpoint(elementsById, arrow.endBinding);
-    if (!start || !end) continue;
+    if (!start || !end) {
+      continue;
+    }
     arrow.x = start[0];
     arrow.y = start[1];
-    arrow.points = [[0, 0], [end[0] - start[0], end[1] - start[1]]];
+    arrow.points = [
+      [0, 0],
+      [end[0] - start[0], end[1] - start[1]],
+    ];
     arrow.width = Math.abs(end[0] - start[0]);
     arrow.height = Math.abs(end[1] - start[1]);
   }
@@ -37,7 +42,9 @@ const resolveEndpoint = (elementsById, binding) => {
   const element = binding?.elementId
     ? elementsById.get(binding.elementId)
     : null;
-  if (!element) return null;
+  if (!element) {
+    return null;
+  }
   const fixedPoint = binding.fixedPoint ?? [0.5, 0.5];
   return [
     element.x + element.width * fixedPoint[0],

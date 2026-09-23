@@ -31,16 +31,36 @@ export function createMockApp(): MockAppControls {
 
   const app = {
     // --- Handler setters (ExcalidrawAppCore assigns these) ---
-    set ontoolinput(fn: any) { _ontoolinput = fn; },
-    get ontoolinput() { return _ontoolinput; },
-    set ontoolinputpartial(fn: any) { _ontoolinputpartial = fn; },
-    get ontoolinputpartial() { return _ontoolinputpartial; },
-    set ontoolresult(fn: any) { _ontoolresult = fn; },
-    get ontoolresult() { return _ontoolresult; },
-    set onhostcontextchanged(fn: any) { _onhostcontextchanged = fn; },
-    get onhostcontextchanged() { return _onhostcontextchanged; },
-    set onteardown(_fn: any) { /* noop */ },
-    set onerror(_fn: any) { /* noop */ },
+    set ontoolinput(fn: any) {
+      _ontoolinput = fn;
+    },
+    get ontoolinput() {
+      return _ontoolinput;
+    },
+    set ontoolinputpartial(fn: any) {
+      _ontoolinputpartial = fn;
+    },
+    get ontoolinputpartial() {
+      return _ontoolinputpartial;
+    },
+    set ontoolresult(fn: any) {
+      _ontoolresult = fn;
+    },
+    get ontoolresult() {
+      return _ontoolresult;
+    },
+    set onhostcontextchanged(fn: any) {
+      _onhostcontextchanged = fn;
+    },
+    get onhostcontextchanged() {
+      return _onhostcontextchanged;
+    },
+    set onteardown(_fn: any) {
+      /* noop */
+    },
+    set onerror(_fn: any) {
+      /* noop */
+    },
 
     // --- Methods ---
     sendLog({ logger, data }: { level: string; logger: string; data: string }) {
@@ -58,7 +78,13 @@ export function createMockApp(): MockAppControls {
       return { mode };
     },
 
-    async callServerTool({ name, arguments: args }: { name: string; arguments: any }) {
+    async callServerTool({
+      name,
+      arguments: args,
+    }: {
+      name: string;
+      arguments: any;
+    }) {
       console.log(`[mock] callServerTool: ${name}`, args);
       if (name === "read_checkpoint") {
         return { content: [{ type: "text", text: "null" }], isError: false };
@@ -68,7 +94,10 @@ export function createMockApp(): MockAppControls {
       }
       if (name === "export_to_excalidraw") {
         // Return a mock URL
-        return { content: [{ type: "text", text: "https://excalidraw.com/#mock-dev" }], isError: false };
+        return {
+          content: [{ type: "text", text: "https://excalidraw.com/#mock-dev" }],
+          isError: false,
+        };
       }
       return { content: [], isError: false };
     },
@@ -107,7 +136,9 @@ export function createMockApp(): MockAppControls {
       const tick = () => {
         if (i < elements.length) {
           i++;
-          _ontoolinputpartial?.({ elements: JSON.stringify(elements.slice(0, i)) });
+          _ontoolinputpartial?.({
+            elements: JSON.stringify(elements.slice(0, i)),
+          });
           setTimeout(tick, intervalMs);
         } else {
           // Finalize
