@@ -1,4 +1,8 @@
 import {
+  positionNativeArrowLabel,
+  routeNativeElbowArrow,
+} from "./native-derived-geometry.js";
+import {
   applyMcpStyleDefaults,
   applyMcpTextAlignment,
   isCompleteNativeElement,
@@ -90,6 +94,9 @@ export function convertElementsForStorage(
       );
       bindArrowEndpoint(element, input.endBinding ?? input.end, "end", byId);
       normalizeBoundArrowGeometry(element);
+      if (element.elbowed) {
+        Object.assign(element, routeNativeElbowArrow(element, byId));
+      }
     }
 
     element.index = `a${indexOffset + index}`;
@@ -242,7 +249,7 @@ function createNativeElement(input: any, index: string): any {
   };
 
   if (input.type === "arrow") {
-    native.roundness = input.roundness ?? null;
+    native.roundness = input.elbowed === false ? input.roundness ?? null : null;
     native.points = input.points ?? [
       [0, 0],
       [input.width ?? 100, input.height ?? 0],
@@ -251,7 +258,7 @@ function createNativeElement(input: any, index: string): any {
     native.endBinding = null;
     native.startArrowhead = input.startArrowhead ?? null;
     native.endArrowhead = input.endArrowhead ?? "arrow";
-    native.elbowed = input.elbowed ?? false;
+    native.elbowed = input.elbowed ?? true;
     native.moveMidPointsWithElement = input.moveMidPointsWithElement ?? false;
   }
 
@@ -408,8 +415,14 @@ function centerBoundTextElements(
       continue;
     }
 
-    const x = container.x + (container.width - element.width) / 2;
-    const y = container.y + (container.height - element.height) / 2;
+    const position =
+      container.type === "arrow"
+        ? positionNativeArrowLabel(container, element, byId)
+        : {
+            x: container.x + (container.width - element.width) / 2,
+            y: container.y + (container.height - element.height) / 2,
+          };
+    const { x, y } = position;
     if (
       element.x !== x ||
       element.y !== y ||

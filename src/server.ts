@@ -96,7 +96,7 @@ Canvas background is white.
 ### Element Types
 
 **Rectangle**: \`{ "type": "rectangle", "id": "r1", "x": 100, "y": 100, "width": 200, "height": 100 }\`
-- Soft corners are automatic. Use \`roundness: null\` only when sharp corners are required.
+- Shapes use soft corners automatically. New arrows use native Elbow routing by default; set \`elbowed: false\` to opt out.
 - \`backgroundColor: "#a5d8ff"\`, \`fillStyle: "solid"\` for filled
 
 **Ellipse**: \`{ "type": "ellipse", "id": "e1", "x": 100, "y": 100, "width": 150, "height": 150 }\`
@@ -120,7 +120,7 @@ Canvas background is white.
 **Arrow**: \`{ "type": "arrow", "id": "a1", "x": 300, "y": 150, "width": 200, "height": 0, "points": [[0,0],[200,0]], "endArrowhead": "arrow" }\`
 - points: [dx, dy] offsets from element x,y
 - endArrowhead: null | "arrow" | "bar" | "dot" | "triangle"
-- Edges default to soft (the middle edge option). Set \`"roundness": null\` for sharp edges.
+- New arrows default to native Elbow (the third arrow type); bound endpoints route when connected shapes move. For a straight sharp arrow use \`"elbowed": false, "roundness": null\`; for a round arrow use \`"elbowed": false, "roundness": { "type": 2 }\`.
 
 ### Arrow Bindings
 Use both endpoint bindings so arrows remain attached when cards move:

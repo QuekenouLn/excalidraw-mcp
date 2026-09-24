@@ -42,6 +42,12 @@ const operationSchema = z.discriminatedUnion("type", [
     end: elementPreconditionSchema,
     startArrowhead: arrowheadSchema.optional(),
     endArrowhead: arrowheadSchema.optional(),
+    arrowType: z.enum(["sharp", "round", "elbow"]).default("elbow"),
+  }),
+  z.object({
+    type: z.literal("set_arrow_type"),
+    edge: elementPreconditionSchema,
+    arrowType: z.enum(["sharp", "round", "elbow"]),
   }),
   z.object({
     type: z.literal("set_edge_label"),
@@ -158,8 +164,13 @@ const toAtomicOperations = (operations: z.infer<typeof operationSchema>[]) =>
           ...(operation.endArrowhead !== undefined
             ? { endArrowhead: operation.endArrowhead }
             : {}),
+          elbowed: operation.arrowType === "elbow",
+          roundness: operation.arrowType === "round" ? { type: 2 } : null,
         },
       };
+    }
+    if (operation.type === "set_arrow_type") {
+      return operation;
     }
     return {
       type: operation.type,
@@ -339,7 +350,7 @@ export function registerAtomicTools(
     "apply_scene_operations",
     {
       description:
-        "Atomically connect two exact nodes or update bound node/edge text from an immutable checkpoint. Requires a scene revision and per-element version preconditions; success creates one derived checkpoint with an auditable field-level diff.",
+        "Atomically add native elbow arrows by default, change an arrow type (sharp, round, elbow), or update bound text. Requires a scene revision and per-element version preconditions; success creates one derived checkpoint with an auditable field-level diff.",
       inputSchema: {
         checkpointId: checkpointIdSchema,
         expectedRevision: revisionSchema,

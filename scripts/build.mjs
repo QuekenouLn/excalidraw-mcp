@@ -35,7 +35,8 @@ rmSync(join(root, "dist", "src"), { recursive: true, force: true });
 run("tsc -p tsconfig.server.json");
 
 // 5. Bundle server + index
-run('bun build "src/server.ts" --outdir dist --target node');
+const nativeEnv = `--define 'import.meta.env.PROD=true' --define 'import.meta.env.DEV=false' --define 'import.meta.env.MODE="production"'`;
+run(`bun build "src/server.ts" --outdir dist --target node ${nativeEnv}`);
 run(
-  'bun build "src/main.ts" --outfile "dist/index.js" --target node --banner "#!/usr/bin/env node"',
+  `bun build "src/main.ts" --outfile "dist/index.js" --target node --banner "#!/usr/bin/env node" ${nativeEnv}`,
 );

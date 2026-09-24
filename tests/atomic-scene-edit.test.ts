@@ -10,6 +10,7 @@ import {
   type AtomicSceneElement,
 } from "../src/atomic-scene-edit";
 import { convertElementsForStorage } from "../src/server-element-conversion";
+import { routeNativeElbowArrow } from "../src/native-derived-geometry.js";
 
 import {
   ATOMIC_SCENE_IDS,
@@ -176,6 +177,54 @@ describe("atomic scene editing", () => {
     expectPointOnElementBoundary(endPoint, target);
   });
 
+  test("create_view conversion defaults new arrows to native elbow and respects explicit sharp", () => {
+    const makeScene = (elbowed?: boolean) =>
+      convertElementsForStorage([
+        { id: "left", type: "rectangle", x: 0, y: 0, width: 100, height: 80 },
+        {
+          id: "right",
+          type: "rectangle",
+          x: 400,
+          y: 160,
+          width: 100,
+          height: 80,
+        },
+        {
+          id: "connector",
+          type: "arrow",
+          x: 100,
+          y: 40,
+          width: 300,
+          height: 160,
+          points: [
+            [0, 0],
+            [300, 160],
+          ],
+          start: { id: "left" },
+          end: { id: "right" },
+          label: { text: "calls" },
+          ...(elbowed === undefined ? {} : { elbowed }),
+        },
+      ]) as AtomicSceneElement[];
+    const native = getElement(makeScene(), "connector");
+    expect(native.elbowed).toBe(true);
+    expect(native.roundness).toBeNull();
+    expect(native.startBinding.elementId).toBe("left");
+    expect(native.endBinding.elementId).toBe("right");
+    expect(native.points.length).toBeGreaterThan(2);
+    expect(
+      native.points.every(
+        (point: number[], index: number) =>
+          index === 0 ||
+          point[0] === native.points[index - 1][0] ||
+          point[1] === native.points[index - 1][1],
+      ),
+    ).toBe(true);
+    const label = getElement(makeScene(), "connector__label");
+    expect(label.containerId).toBe(native.id);
+    expect(getElement(makeScene(false), "connector").elbowed).toBe(false);
+  });
+
   test("add_edge creates an arrow with bidirectional references and an auditable diff", () => {
     const source = asAtomicElements(createAtomicScene());
     const snapshot = structuredClone(source);
@@ -199,6 +248,7 @@ describe("atomic scene editing", () => {
     expect(edge).toMatchObject({
       id: edgeId,
       type: "arrow",
+      elbowed: true,
       startBinding: { elementId: start.id, mode: "orbit" },
       endBinding: { elementId: end.id, mode: "orbit" },
       startArrowhead: null,
@@ -242,6 +292,103 @@ describe("atomic scene editing", () => {
     expectCompleteDiff(source, result);
     expectUnrelatedElementPreserved(source, result);
     expect(source).toEqual(snapshot);
+  });
+
+  test("converts an existing labeled arrow to native elbow without replacing its bindings", () => {
+    const source = asAtomicElements(createAtomicScene());
+    const snapshot = structuredClone(source);
+    const edge = getElement(source, ATOMIC_SCENE_IDS.arrows.forward);
+    const label = getElement(source, ATOMIC_SCENE_IDS.arrowTexts.forward);
+    const result = applyAtomicSceneEdit(source, [
+      {
+        type: "set_arrow_type",
+        edge: { id: edge.id as string, ...versionExpectation(edge) },
+        arrowType: "elbow",
+      },
+    ]);
+    const converted = getElement(result.elements, edge.id as string);
+    const convertedLabel = getElement(result.elements, label.id as string);
+    expect(converted.elbowed).toBe(true);
+    expect(converted.roundness).toBeNull();
+    expect(converted.startBinding).toEqual(edge.startBinding);
+    expect(converted.endBinding).toEqual(edge.endBinding);
+    expect(converted.boundElements).toEqual(edge.boundElements);
+    expect(
+      converted.points.every(
+        (point: number[], index: number) =>
+          index === 0 ||
+          point[0] === converted.points[index - 1][0] ||
+          point[1] === converted.points[index - 1][1],
+      ),
+    ).toBe(true);
+    expect(convertedLabel.containerId).toBe(edge.id);
+    expect(convertedLabel.text).toBe(label.text);
+    expect(converted.version).toBe(edge.version + 1);
+    assertAtomicSceneBidirectionalBindings(result.elements as never);
+    expectCompleteDiff(source, result);
+    expect(source).toEqual(snapshot);
+
+    const unchanged = applyAtomicSceneEdit(result.elements, [
+      {
+        type: "set_arrow_type",
+        edge: { id: edge.id as string, ...versionExpectation(converted) },
+        arrowType: "elbow",
+      },
+    ]);
+    expect(unchanged.elements).toEqual(result.elements);
+    expect(unchanged.affectedElementIds).toEqual([]);
+
+    const sharp = applyAtomicSceneEdit(result.elements, [
+      {
+        type: "set_arrow_type",
+        edge: { id: edge.id as string, ...versionExpectation(converted) },
+        arrowType: "sharp",
+      },
+    ]);
+    expect(getElement(sharp.elements, edge.id as string)).toMatchObject({
+      elbowed: false,
+      roundness: null,
+      points: [converted.points[0], converted.points.at(-1)],
+    });
+    const straight = getElement(sharp.elements, edge.id as string);
+    const round = applyAtomicSceneEdit(sharp.elements, [
+      {
+        type: "set_arrow_type",
+        edge: { id: edge.id as string, ...versionExpectation(straight) },
+        arrowType: "round",
+      },
+    ]);
+    expect(getElement(round.elements, edge.id as string)).toMatchObject({
+      elbowed: false,
+      roundness: { type: 2 },
+    });
+
+    const moved = new Map(
+      result.elements.map((element) => [element.id, structuredClone(element)]),
+    );
+    const target = moved.get(edge.endBinding.elementId)!;
+    target.y += 120;
+    const rerouted = routeNativeElbowArrow(converted, moved);
+    expect(rerouted.points).not.toEqual(converted.points);
+    expect(
+      rerouted.points.every(
+        (point: number[], index: number) =>
+          index === 0 ||
+          point[0] === rerouted.points[index - 1][0] ||
+          point[1] === rerouted.points[index - 1][1],
+      ),
+    ).toBe(true);
+
+    const stale = captureAtomicError(() =>
+      applyAtomicSceneEdit(result.elements, [
+        {
+          type: "set_arrow_type",
+          edge: { id: edge.id as string, ...versionExpectation(edge) },
+          arrowType: "sharp",
+        },
+      ]),
+    );
+    expect(stale.code).toBe(ATOMIC_SCENE_EDIT_ERROR_CODES.VERSION_CONFLICT);
   });
 
   test("set_edge_label updates only bound text content and derived metadata", () => {

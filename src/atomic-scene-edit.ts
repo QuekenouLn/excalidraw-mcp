@@ -1,6 +1,8 @@
 import {
   computeNativeBoundTextPosition,
+  positionNativeArrowLabel,
   refreshNativeBoundArrows,
+  routeNativeElbowArrow,
 } from "./native-derived-geometry.js";
 import { deriveBoundTextDimensions } from "./server-element-conversion.js";
 
@@ -63,13 +65,24 @@ export type SetNodeLabelOperation = Record<string, unknown> & {
   text: string;
 };
 
+export type SetArrowTypeOperation = {
+  type: "set_arrow_type";
+  edge: ElementVersionExpectation & { id: string };
+  arrowType: "sharp" | "round" | "elbow";
+};
+
 export type AtomicSceneEditOperation =
   | AddEdgeOperation
   | SetEdgeLabelOperation
   | SetNodeLabelOperation
+  | SetArrowTypeOperation
   | (Record<string, unknown> & {
-      type?: "add_edge" | "set_edge_label" | "set_node_label";
-      op?: "add_edge" | "set_edge_label" | "set_node_label";
+      type?:
+        | "add_edge"
+        | "set_edge_label"
+        | "set_node_label"
+        | "set_arrow_type";
+      op?: "add_edge" | "set_edge_label" | "set_node_label" | "set_arrow_type";
     });
 
 export type AtomicSceneFieldDiff = {
@@ -141,7 +154,17 @@ type NormalizedSetLabel = {
   textId: string;
 };
 
-type NormalizedOperation = NormalizedAddEdge | NormalizedSetLabel;
+type NormalizedSetArrowType = {
+  kind: "set_arrow_type";
+  operationIndex: number;
+  targetId: string;
+  arrowType: "sharp" | "round" | "elbow";
+};
+
+type NormalizedOperation =
+  | NormalizedAddEdge
+  | NormalizedSetLabel
+  | NormalizedSetArrowType;
 type DiffKind = "direct" | "derived";
 type ChangeAttribution = { kind: DiffKind; operationIndex: number };
 
@@ -242,6 +265,70 @@ export function applyAtomicSceneEdit(
         operation.operationIndex,
         setField,
       );
+      if (edge.elbowed) {
+        for (const [field, value] of Object.entries(
+          routeNativeElbowArrow(edge, workingById),
+        )) {
+          setField(edge, field, value, {
+            kind: "derived",
+            operationIndex: operation.operationIndex,
+          });
+        }
+      }
+      continue;
+    }
+
+    if (operation.kind === "set_arrow_type") {
+      const edge = workingById.get(operation.targetId) as AtomicSceneElement;
+      if (edge.elbowed && operation.arrowType === "elbow") {
+        continue;
+      }
+      const elbowed = operation.arrowType === "elbow";
+      setField(edge, "elbowed", elbowed, {
+        kind: "direct",
+        operationIndex: operation.operationIndex,
+      });
+      setField(
+        edge,
+        "roundness",
+        operation.arrowType === "round" ? { type: 2 } : null,
+        { kind: "direct", operationIndex: operation.operationIndex },
+      );
+      if (elbowed) {
+        for (const [field, value] of Object.entries(
+          routeNativeElbowArrow(edge, workingById),
+        )) {
+          setField(edge, field, value, {
+            kind: "derived",
+            operationIndex: operation.operationIndex,
+          });
+        }
+      } else {
+        if (Array.isArray(edge.points) && edge.points.length > 2) {
+          setField(edge, "points", [edge.points[0], edge.points.at(-1)], {
+            kind: "derived",
+            operationIndex: operation.operationIndex,
+          });
+        }
+        setField(edge, "fixedSegments", null, {
+          kind: "derived",
+          operationIndex: operation.operationIndex,
+        });
+      }
+      const labelId = edge.boundElements?.find(
+        (binding: { type: string }) => binding.type === "text",
+      )?.id;
+      const label = labelId && workingById.get(labelId);
+      if (label && label.type === "text" && label.containerId === edge.id) {
+        for (const [field, value] of Object.entries(
+          positionNativeArrowLabel(edge, label, workingById),
+        )) {
+          setField(label, field, value, {
+            kind: "derived",
+            operationIndex: operation.operationIndex,
+          });
+        }
+      }
       continue;
     }
 
@@ -445,6 +532,7 @@ function prevalidateOperations(
   const normalized: NormalizedOperation[] = [];
   const plannedEdgeIds = new Set<string>();
   const labelTargets = new Set<string>();
+  const arrowTypeTargets = new Set<string>();
 
   for (const [operationIndex, rawOperation] of operations.entries()) {
     const operation = asObject(rawOperation, operationIndex, "operation");
@@ -452,7 +540,8 @@ function prevalidateOperations(
     if (
       kind !== "add_edge" &&
       kind !== "set_edge_label" &&
-      kind !== "set_node_label"
+      kind !== "set_node_label" &&
+      kind !== "set_arrow_type"
     ) {
       fail(
         ATOMIC_SCENE_EDIT_ERROR_CODES.INVALID_ARGUMENT,
@@ -523,6 +612,46 @@ function prevalidateOperations(
         start,
         end,
       });
+      continue;
+    }
+
+    if (kind === "set_arrow_type") {
+      const targetObject = optionalObject(operation.edge);
+      const targetId = requireString(
+        targetObject?.id,
+        operationIndex,
+        "edge.id",
+      );
+      if (arrowTypeTargets.has(targetId)) {
+        fail(
+          ATOMIC_SCENE_EDIT_ERROR_CODES.DUPLICATE_OPERATION_TARGET,
+          `More than one arrow type operation targets "${targetId}".`,
+          operationIndex,
+          { elementId: targetId },
+        );
+      }
+      const target = requireLiveElement(elementsById, targetId, operationIndex);
+      assertElementType(target, new Set(["arrow"]), "arrow", operationIndex);
+      assertMutableElement(target, operationIndex);
+      const expectation = readExpectation(operation, targetObject);
+      assertRequiredExpectation(expectation, operationIndex, "edge");
+      assertExpectation(target, expectation, operationIndex);
+      const arrowType = operation.arrowType;
+      if (
+        arrowType !== "sharp" &&
+        arrowType !== "round" &&
+        arrowType !== "elbow"
+      ) {
+        fail(
+          ATOMIC_SCENE_EDIT_ERROR_CODES.INVALID_ARGUMENT,
+          "Invalid arrow type.",
+          operationIndex,
+        );
+      }
+      validateArrowEndpoint(target, "startBinding", elementsById);
+      validateArrowEndpoint(target, "endBinding", elementsById);
+      arrowTypeTargets.add(targetId);
+      normalized.push({ kind, operationIndex, targetId, arrowType });
       continue;
     }
 
@@ -883,7 +1012,7 @@ function createArrowElement(
     locked: false,
     startArrowhead: null,
     endArrowhead: "arrow",
-    elbowed: false,
+    elbowed: true,
     moveMidPointsWithElement: false,
     ...input,
     id: operation.edgeId,
