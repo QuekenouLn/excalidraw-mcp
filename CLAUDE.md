@@ -103,12 +103,23 @@ Two-tier storage for diagram state persistence:
 
 ## Build
 
+This fork requires its matching parent Excalidraw monorepo: native geometry is bundled from `../../packages/element/src`. Install the root Yarn dependencies and the MCP pnpm dependencies before building. A standalone source checkout is not supported; the resulting `dist` directory is self-contained at runtime.
+
 ```bash
-npm install
-npm run build
+# From the parent monorepo root
+yarn install --frozen-lockfile
+cd integrations/excalidraw-mcp
+pnpm install --frozen-lockfile
+pnpm run build
 ```
 
+For containers, run `docker compose build excalidraw-mcp` from the parent root. See `../../docs/excalidraw-mcp-native-elbow-repair.md` for design and validation.
+
 Build pipeline: `tsc --noEmit` → `vite build` (singlefile HTML) → `tsc -p tsconfig.server.json` → `bun build` (server + index).
+
+## Service Operations
+
+Use the parent Compose service on port `3002`. Do not start additional services, temporary server processes, or alternate listening ports without the user's explicit approval. This includes container smoke tests that start a separate server: prefer in-process tests and verification against the existing service.
 
 ## Running
 

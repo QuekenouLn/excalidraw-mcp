@@ -23,11 +23,18 @@ For apps that don't yet have an official integration, you can add a custom MCP /
 
 **Option B: Build from Source**
 
+This fork bundles native geometry from its matching parent Excalidraw checkout. Build from the monorepo (with Node.js, Corepack and Bun available):
+
 ```bash
-git clone https://github.com/excalidraw/excalidraw-mcp.git
-cd excalidraw-mcp-app
-pnpm install && pnpm run build
+# From the Excalidraw monorepo root
+git submodule update --init integrations/excalidraw-mcp
+yarn install --frozen-lockfile
+cd integrations/excalidraw-mcp
+pnpm install --frozen-lockfile
+pnpm run build
 ```
+
+The root Yarn dependencies resolve the native geometry's transitive imports; the MCP pnpm dependencies build the server and widget. A standalone checkout of this fork cannot build without the parent sources. The bundled `dist` output runs without the monorepo or its `node_modules`. See the parent repository's [repair plan and validation](../../docs/excalidraw-mcp-native-elbow-repair.md).
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
@@ -64,12 +71,15 @@ PRs welcome! See [Local](#local) above for build instructions.
 
 ### Deploy your own instance
 
-You can deploy your own copy to Vercel in a few clicks:
+The supported container build for this fork runs from the parent monorepo:
 
-1. Fork this repo
-2. Go to [vercel.com/new](https://vercel.com/new) and import your fork
-3. No environment variables needed — just deploy
-4. Your server will be at `https://your-project.vercel.app/mcp`
+```bash
+docker compose build excalidraw-mcp
+```
+
+It uses `deploy/excalidraw-mcp.Dockerfile` with the repository root as context, installs both locked dependency sets, and copies only `dist` into the runtime image. Building does not replace an existing container. After deployment is approved, recreate only this service with `docker compose up -d --no-deps excalidraw-mcp` and reconnect the client to refresh tool discovery. Preserve the checkpoint volume.
+
+Standalone Vercel source deployment requires providing the same parent sources and dependencies; the upstream one-click deployment does not satisfy this fork's native geometry dependency.
 
 ### Release checklist
 
@@ -84,8 +94,7 @@ pnpm run build && mcpb pack .
 # 3. Create GitHub release
 gh release create v0.3.0 excalidraw-mcp-app.mcpb --title "v0.3.0" --notes "What changed"
 
-# 4. Deploy to Vercel
-vercel --prod
+# 4. Deploy using the parent monorepo container workflow above
 ```
 
 </details>

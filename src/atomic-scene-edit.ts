@@ -283,7 +283,10 @@ export function applyAtomicSceneEdit(
       if (edge.elbowed && operation.arrowType === "elbow") {
         continue;
       }
+      const wasElbowed = edge.elbowed;
       const elbowed = operation.arrowType === "elbow";
+      // Compute global endpoints before changing the original arrow's type.
+      const routed = elbowed ? routeNativeElbowArrow(edge, workingById) : null;
       setField(edge, "elbowed", elbowed, {
         kind: "direct",
         operationIndex: operation.operationIndex,
@@ -294,17 +297,19 @@ export function applyAtomicSceneEdit(
         operation.arrowType === "round" ? { type: 2 } : null,
         { kind: "direct", operationIndex: operation.operationIndex },
       );
-      if (elbowed) {
-        for (const [field, value] of Object.entries(
-          routeNativeElbowArrow(edge, workingById),
-        )) {
+      if (routed) {
+        for (const [field, value] of Object.entries(routed)) {
           setField(edge, field, value, {
             kind: "derived",
             operationIndex: operation.operationIndex,
           });
         }
       } else {
-        if (Array.isArray(edge.points) && edge.points.length > 2) {
+        if (
+          wasElbowed &&
+          Array.isArray(edge.points) &&
+          edge.points.length > 2
+        ) {
           setField(edge, "points", [edge.points[0], edge.points.at(-1)], {
             kind: "derived",
             operationIndex: operation.operationIndex,
@@ -475,6 +480,7 @@ function redrawDerivedGeometry(
       redrawn,
       geometryTriggers,
       attributions,
+      redrawById,
     );
     if (!attribution) {
       continue;
@@ -499,8 +505,15 @@ function resolveGeometryAttribution(
   element: AtomicSceneElement,
   geometryTriggers: Map<string, ChangeAttribution>,
   attributions: Map<string, Map<string, ChangeAttribution>>,
+  elementsById: Map<string, AtomicSceneElement>,
 ): ChangeAttribution | null {
+  const container =
+    typeof element.containerId === "string"
+      ? elementsById.get(element.containerId)
+      : undefined;
   const candidates = [
+    geometryTriggers.get(container?.startBinding?.elementId),
+    geometryTriggers.get(container?.endBinding?.elementId),
     geometryTriggers.get(element.id as string),
     typeof element.containerId === "string"
       ? geometryTriggers.get(element.containerId)

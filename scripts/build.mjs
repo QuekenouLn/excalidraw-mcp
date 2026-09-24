@@ -1,11 +1,20 @@
 #!/usr/bin/env node
 import { execSync } from "child_process";
-import { renameSync, rmSync } from "fs";
+import { existsSync, renameSync, rmSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
+const nativeSource = join(root, "../../packages/element/src/elbowArrow.ts");
+if (!existsSync(nativeSource)) {
+  throw new Error(
+    "This MCP fork requires the matching Excalidraw monorepo checkout. " +
+      "Initialize integrations/excalidraw-mcp in that checkout and install both " +
+      "the root Yarn and MCP pnpm dependencies before building. " +
+      "See docs/excalidraw-mcp-native-elbow-repair.md in the parent repository.",
+  );
+}
 
 function run(cmd, env = {}) {
   console.log(`> ${cmd}`);
