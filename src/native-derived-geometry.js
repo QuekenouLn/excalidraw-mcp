@@ -1,3 +1,8 @@
+import { generateKeyBetween } from "../../../packages/fractional-indexing/src/index.ts";
+
+export const createNativeElementIndexBetween = (before, after) =>
+  generateKeyBetween(before, after);
+
 import { updateElbowArrowPoints } from "../../../packages/element/src/elbowArrow.ts";
 import { LinearElementEditor } from "../../../packages/element/src/linearElementEditor.ts";
 import { computeBoundTextPosition } from "../../../packages/element/src/textElement.ts";

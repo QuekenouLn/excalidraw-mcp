@@ -120,14 +120,7 @@ describe("create_view style protocol", () => {
       (result.structuredContent as any).checkpointId,
     );
 
-    expect(checkpoint?.elements[0]).toMatchObject({
-      id: existing.id,
-      fontFamily: existing.fontFamily,
-      version: existing.version,
-      versionNonce: existing.versionNonce,
-      customData: existing.customData,
-      textAlign: "center",
-    });
+    expect(checkpoint?.elements[0]).toEqual(existing);
     expect(checkpoint?.elements[1]).toMatchObject({
       id: "new",
       index: "a1",

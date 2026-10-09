@@ -1,3 +1,5 @@
+import { registerSingleElementTool } from "./single-element-tool.js";
+
 import crypto from "node:crypto";
 
 import { z } from "zod/v4";
@@ -185,6 +187,7 @@ export function registerAtomicTools(
   store: CheckpointStore,
   ensureFontMetrics: () => Promise<void> = async () => {},
 ): void {
+  registerSingleElementTool(server, store, ensureFontMetrics);
   server.registerTool(
     "select_scene_elements",
     {
@@ -355,6 +358,7 @@ export function registerAtomicTools(
         checkpointId: checkpointIdSchema,
         expectedRevision: revisionSchema,
         operations: z.array(operationSchema).min(1).max(100),
+        allowedElementIds: z.array(elementIdSchema).max(200).optional(),
       },
       annotations: {
         readOnlyHint: false,
@@ -399,6 +403,19 @@ export function registerAtomicTools(
           checkpoint.elements,
           toAtomicOperations(input.operations),
         );
+        if (input.allowedElementIds) {
+          const allowed = new Set(input.allowedElementIds);
+          const unexpected = transaction.affectedElementIds.filter(
+            (id) => !allowed.has(id),
+          );
+          if (unexpected.length) {
+            throw new AtomicSceneEditError(
+              "INVARIANT_VIOLATION",
+              "Operation would change elements outside allowedElementIds.",
+              { details: { unexpectedElementIds: unexpected } },
+            );
+          }
+        }
       } catch (error) {
         return errorResult(
           errorCode(error, "ATOMIC_OPERATION_FAILED"),

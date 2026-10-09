@@ -1,3 +1,8 @@
+export function createNativeElementIndexBetween(
+  before: string | null,
+  after: string | null,
+): string;
+
 export function positionNativeArrowLabel(
   arrow: Record<string, any>,
   label: Record<string, any>,

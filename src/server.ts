@@ -594,7 +594,6 @@ Call read_me first to learn the element format.`,
             baseForMerge.length,
           ),
         ];
-        resolvedElements = convertElementsForStorage(resolvedElements);
       } else {
         resolvedElements = convertElementsForStorage(
           parsed.filter((el: any) => el.type !== "delete"),

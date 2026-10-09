@@ -4,6 +4,28 @@ MCP server that streams hand-drawn Excalidraw diagrams with smooth viewport came
 
 ![Demo](docs/demo.gif)
 
+## Single-element editing
+
+Use `select_scene_elements` with an ID (or a few IDs) to obtain the scene revision and element versions, then call `edit_scene_element`. No full scene query is needed in the agent context.
+
+- `changes` updates one node's position, size or style, or one arrow's style / `startArrowhead` / `endArrowhead`.
+- `text` updates the target's bound label.
+- `replaceWithCard: {text, styleFrom?}` converts one unbound Markdown Frame to a native rectangle and bound text, retaining its ID, position, dimensions and stacking order. `styleFrom` is a rectangle's `{id, version, versionNonce}`. Oversized text fails instead of enlarging the card.
+- Only the target and its own bound text may change by default. Moving a connected node can require arrow updates; list only those permitted IDs in `allowedElementIds`. Otherwise the transaction fails before creating a checkpoint.
+
+```json
+{
+  "checkpointId": "CURRENT_CHECKPOINT",
+  "expectedRevision": "CURRENT_SCENE_REVISION",
+  "target": {"id": "ARROW_ID", "version": 7, "versionNonce": 123},
+  "changes": {"endArrowhead": "triangle"}
+}
+```
+
+Call with `excalidraw-agent-cli call edit_scene_element --input request.json`, inspect the returned affected IDs and field diff, then use `save_remote_file` with the latest remote file revision. The server still loads and saves complete checkpoints internally; only selected elements and edit diffs are returned to the agent. Existing `apply_scene_operations` also accepts `allowedElementIds` to bound a batch operation's effects.
+
+`create_view` with `restoreCheckpoint` now converts only additions. Restored elements retain user positioning and alignment; adding one card does not recenter existing arrow labels.
+
 ## Install
 
 Works with any client that supports [MCP Apps](https://modelcontextprotocol.io/docs/extensions/apps) — Claude, ChatGPT, VS Code, Goose, and others. If something doesn't work, please [open an issue](https://github.com/antonpk1/excalidraw-mcp-app/issues).
