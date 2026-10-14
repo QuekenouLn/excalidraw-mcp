@@ -223,7 +223,7 @@ function getRequiredContainerWidth(container: any, textWidth: number): number {
 }
 
 function createNativeElement(input: any, index: string): any {
-  const { label, start, end, ...element } = input;
+  const { label, start, end, centerX, ...element } = input;
   const native = {
     angle: 0,
     strokeColor: "#1e1e1e",
@@ -257,7 +257,8 @@ function createNativeElement(input: any, index: string): any {
     native.startBinding = null;
     native.endBinding = null;
     native.startArrowhead = input.startArrowhead ?? null;
-    native.endArrowhead = input.endArrowhead ?? "arrow";
+    native.endArrowhead =
+      input.endArrowhead === undefined ? "arrow" : input.endArrowhead;
     native.elbowed = input.elbowed ?? true;
     native.moveMidPointsWithElement = input.moveMidPointsWithElement ?? false;
   }
@@ -275,6 +276,9 @@ function createNativeElement(input: any, index: string): any {
           ),
           fontSize,
         );
+    if (!input.containerId && isFiniteNumber(centerX)) {
+      native.x = centerX - native.width / 2;
+    }
     native.height = isFiniteNumber(input.height)
       ? input.height
       : Math.max(lines.length, 1) * fontSize * (input.lineHeight ?? 1.2);
@@ -325,7 +329,11 @@ function createBoundText(
     width,
     height,
     angle: 0,
-    strokeColor: label.strokeColor ?? container.strokeColor,
+    strokeColor:
+      label.strokeColor ??
+      (container.strokeColor === "transparent"
+        ? "#1e1e1e"
+        : container.strokeColor),
     backgroundColor: "transparent",
     fillStyle: "solid",
     strokeWidth: 1,

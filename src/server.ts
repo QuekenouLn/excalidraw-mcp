@@ -107,15 +107,16 @@ Canvas background is white.
 \`{ "type": "rectangle", "id": "r1", "x": 100, "y": 100, "width": 200, "height": 80, "label": { "text": "Hello", "fontSize": 20 } }\`
 - Works on rectangle, ellipse, diamond
 - Text auto-centers and container auto-resizes to fit
+- Labels inherit the container stroke color, except transparent strokes default to readable dark text. Set \`label.strokeColor\` to override the text color explicitly.
 - Saves tokens vs separate text elements
 
 **Labeled arrow**: \`"label": { "text": "connects" }\` on an arrow element.
 
 **Standalone text** (titles, annotations only):
 \`{ "type": "text", "id": "t1", "x": 150, "y": 138, "text": "Hello", "fontSize": 20 }\`
-- x is the LEFT edge of the text. To center text at position cx: set x = cx - estimatedWidth/2
-- MCP measures Maple Mono NF CN glyph advances and adds 35% horizontal safety space
-- MCP fixes textAlign to "center". Continue positioning with x and estimatedWidth because alignment only affects text inside its bounds.
+- x is the LEFT edge of the text. For a centered title, prefer \`centerX\`: the server measures the final width and sets x = centerX - width/2. Example: \`{ "type": "text", "id": "title", "centerX": 600, "y": 40, "text": "标题 / Title", "fontSize": 28 }\`. On standalone text, a finite centerX overrides x; it is a creation hint, not stored scene metadata.
+- MCP measures Maple Mono NF CN glyph advances and adds 35% horizontal safety space plus padding. Do not estimate this width to center text; use centerX or a labeled shape.
+- MCP fixes textAlign to "center" inside the text bounds; x without centerX retains its existing left-edge semantics.
 
 **Arrow**: \`{ "type": "arrow", "id": "a1", "x": 300, "y": 150, "width": 200, "height": 0, "points": [[0,0],[200,0]], "endArrowhead": "arrow" }\`
 - points: [dx, dy] offsets from element x,y

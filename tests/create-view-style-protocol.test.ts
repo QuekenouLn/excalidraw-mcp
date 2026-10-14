@@ -27,6 +27,108 @@ describe("create_view style protocol", () => {
     await server.close();
   });
 
+  test("preserves zero strokes and explicit arrowheads while keeping labels visible", async () => {
+    const result = await client.callTool({
+      name: "create_view",
+      arguments: {
+        elements: JSON.stringify([
+          {
+            type: "rectangle",
+            id: "borderless",
+            x: 0,
+            y: 0,
+            width: 240,
+            height: 80,
+            strokeWidth: 0,
+            strokeColor: "transparent",
+            label: { text: "Visible label" },
+          },
+          {
+            type: "rectangle",
+            id: "explicit-label",
+            x: 300,
+            y: 0,
+            width: 240,
+            height: 80,
+            strokeColor: "transparent",
+            label: { text: "Colored label", strokeColor: "#123456" },
+          },
+          ...[undefined, null, "triangle"].map((endArrowhead, i) => ({
+            type: "arrow",
+            id: `arrow-${i}`,
+            x: 0,
+            y: 200 + i * 50,
+            width: 100,
+            height: 0,
+            elbowed: false,
+            endArrowhead,
+          })),
+        ]),
+      },
+    });
+    expect(result.isError).not.toBe(true);
+    const checkpoint = await store.load(
+      (result.structuredContent as any).checkpointId,
+    );
+    const byId = new Map(
+      checkpoint!.elements.map((element) => [element.id, element]),
+    );
+    expect(byId.get("borderless")!.strokeWidth).toBe(0);
+    expect(byId.get("borderless__label")!.strokeColor).toBe("#1e1e1e");
+    expect(byId.get("explicit-label__label")!.strokeColor).toBe("#123456");
+    expect(byId.get("arrow-0")!.endArrowhead).toBe("arrow");
+    expect(byId.get("arrow-1")!.endArrowhead).toBeNull();
+    expect(byId.get("arrow-2")!.endArrowhead).toBe("triangle");
+  });
+
+  test("positions standalone text by its measured center without changing legacy x", async () => {
+    const result = await client.callTool({
+      name: "create_view",
+      arguments: {
+        elements: JSON.stringify([
+          {
+            type: "text",
+            id: "centered",
+            x: 0,
+            centerX: 600,
+            y: 20,
+            text: "中文与 English 标题",
+            fontSize: 28,
+          },
+          {
+            type: "text",
+            id: "sized",
+            centerX: 300,
+            y: 80,
+            width: 200,
+            text: "Explicit width",
+            fontSize: 20,
+          },
+          {
+            type: "text",
+            id: "legacy",
+            x: 42,
+            y: 120,
+            text: "Legacy",
+            fontSize: 20,
+          },
+        ]),
+      },
+    });
+    expect(result.isError).not.toBe(true);
+    const checkpoint = await store.load(
+      (result.structuredContent as any).checkpointId,
+    );
+    const byId = new Map(
+      checkpoint!.elements.map((element) => [element.id, element]),
+    );
+    const centered = byId.get("centered")!;
+    expect(centered.x + centered.width / 2).toBeCloseTo(600);
+    expect(centered).not.toHaveProperty("centerX");
+    expect(byId.get("sized")!.x).toBe(200);
+    expect(byId.get("legacy")!.x).toBe(42);
+  });
+
   test("applies defaults to new elements", async () => {
     const result = await client.callTool({
       name: "create_view",
@@ -177,9 +279,9 @@ describe("create_view style protocol", () => {
 
     expect(result.isError).not.toBe(true);
     expect(payload.checkpointId).toEqual(expect.any(String));
-    expect(payload.warnings?.some((warning) => warning.type === "overlap")).toBe(
-      true,
-    );
+    expect(
+      payload.warnings?.some((warning) => warning.type === "overlap"),
+    ).toBe(true);
     expect(
       payload.warnings?.some((warning) => warning.type === "unbound-arrow"),
     ).toBe(true);
